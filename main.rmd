@@ -1,0 +1,21 @@
+---
+title: "WQD7004 2024/2025 Sem2 - Group [NUM]"
+output: html_document
+name1: 'Richie Teoh (24088171)'
+name2: 'Elmer Lee (2408236)'
+name3: 'Micole'
+name4: ''
+date: "2025-06-01"
+---
+
+::: {style="text-align: right;"}
+Group N
+
+Richie Teoh (24088171)  
+Elmer Lee (2408236)  
+Micole ()  
+Lee Re Xuan ()  
+Angeline Tan Jie Lin ()
+
+01 June 2025
+:::
