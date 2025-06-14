@@ -1,23 +1,202 @@
 ---
-title: "WQD7004 2024/2025 Sem2 - Group [NUM]"
-output: html_document
-name1: 'Richie Teoh (24088171)'
-name2: 'Elmer Lee (2408236)'
-name3: 'Micole'
-name4: ''
+title: "WQD7004 2024/2025 Sem2 - Group G03"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float: true
 date: "2025-06-01"
 ---
 
-::: {style="text-align: right;"}
-Group N
+<style>
+body {
+  background-color: #f7cac9;
+}
+</style>
 
-Richie Teoh (24088171)  
-Elmer Lee (2408236)  
-Micole ()  
-Lee Re Xuan ()  
+::: {style="text-align: right;"}
+Group G03
+
+Richie Teoh (24088171)\
+Elmer Lee (2408236)\
+Micole ()\
+Lee Re Xuan ()\
 Angeline Tan Jie Lin ()
 
 01 June 2025
 :::
 
-Testing
+------------------------------------------------------------------------
+
+# **1 Objectives**
+
+Title: 
+
+- Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
+
+Project Goal:
+
+- There are two (2) goals we wish to achieve with this project:
+1) *Prediction of Rental Prices*: We aim to estimate the rental price of a property based on factors like location, size, amenities. An accurate estimate will help potential renters such as students and workers to get a fair market value.
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(stringr)
+```
+
+```{r}
+setwd('C:/Users/Richie.teoh/Downloads/UM/WQD7004/assignment')
+df <- read.csv('mudah-apartment-kl-selangor.csv')
+df
+```
+
+```{r}
+metadata <- tibble(
+  Column_Name = c(
+    "ads_id",
+    "prop_name",
+    "completion_year",
+    "monthly_rent",
+    "location",
+    "property_type",
+    "rooms",
+    "parking",
+    "bathroom",
+    "size",
+    "furnished",
+    "facilities",
+    "additional_facilities"
+  ),
+  Description = c(
+    "Unique identifier for the listing",
+    "Name of the building/property",
+    "Completion/established year of the property",
+    "Monthly rent in Ringgit Malaysia (RM)",
+    "Property location within Kuala Lumpur region",
+    "Type of property (apartment, condo, flat, etc.)",
+    "Number of rooms in the unit",
+    "Number of parking spaces for the unit",
+    "Number of bathrooms in the unit",
+    "Total area of the unit in square feet",
+    "Furnishing status of the unit (fully, partial, non-furnished)",
+    "Main facilities available",
+    "Additional facilities (e.g., proximity to mall, school, railway, etc.)"
+  )
+)
+
+# Print the metadata table
+print(metadata)
+```
+From the metadata extracted from Kaggle above:
+- ads_id should be dropped as it is a unique identifier for the Mudah rental listing.
+- prop_name can influence the rental price, for example properties under well-known developers such as Arte tend to be higher-priced; however, it does not generalize well and unseen property names might cause issues in the model. Henceforth, we decide to drop this variable as well.
+- completion_year includes some NA values, will investigate further, completion_year contributes to the price and the info are usually available online, hence we will impute it manually from data found online.
+- monthly_rent is saved as chr type due to the "RM" prefixes, will perform appropriate data transformation.
+- size is saved as chr type due to the "sq. ft." suffixes, will perform appropriate data transformation.
+
+```{r}
+# Data Pre-processing
+
+# Keep only serviced residences and condo
+df <- df %>%
+  filter(.data[['property_type']] %in% c('Service Residence','Condominium'))
+# Check and Remove duplicated values.
+duplicates_only <- df %>%
+  filter(duplicated(df) | duplicated(df, fromLast = TRUE)) %>%
+  arrange(ads_id)
+
+duplicates_ads_id <- df %>%
+  filter(duplicated(df['ads_id']) | duplicated(df['ads_id'], fromLast = TRUE)) %>%
+  arrange(ads_id)
+
+duplicates_only
+duplicates_ads_id
+```
+Interestingly, despite *ads_id* being the unique identifier for the rental listing, duplicated(df) does not yield the same result as duplicated(df['ads_id']). Hence, we will only keep the row that contains the most information, or the first one should both rows contain the same amount of information.
+
+```{r}
+# Removing Duplicates
+cleaned_df <- df %>%
+  mutate(na_count = rowSums(is.na(.))) %>%
+  group_by(ads_id) %>%
+  arrange(na_count) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(-na_count)
+
+sum(duplicated(cleaned_df['ads_id']))
+df <- cleaned_df
+
+# 
+```
+## Check for Missing Data and Imputation
+```{r}
+sum(is.na(df))
+colSums(is.na(df))
+df[is.na(df['completion_year']),]
+unique(df[is.na(df['completion_year']),]$prop_name)
+```
+
+
+## Data Transformation
+```{r}
+# Data Transformation
+
+# 1) Removing prefix 'RM' and suffix 'per month' from monthly rent, removing white spaces from 1 700, and convert to numeric type.
+df <- df %>%
+  mutate(
+    monthly_rent = str_remove_all(monthly_rent, "RM|per month|,"),
+    monthly_rent = str_remove_all(monthly_rent, " "),
+    monthly_rent = as.numeric(monthly_rent)
+  )
+
+# 2) Removing suffix 'sq. ft.' from size, removing any white spaces, and convert to numeric type.
+df <- df%>%
+  mutate(
+    size = str_remove_all(size, "sq\\.ft\\."),
+    size = str_remove_all(size, " "),
+    size = as.numeric(size)
+  )
+
+unique(df[is.na(df$completion_year), "prop_name"])
+df[is.na(df$monthly_rent),]
+
+df <- df %>%
+  filter(!is.na(monthly_rent))
+```
+Interesting case, Affina Bay is located in Butterworth but included in this webscrapped Klang Valley Mudah listing.
+Henceforth, we will take more time to clean the data properly based on the listing's location.
+
+```{r}
+unique(df['location'])
+```
+Going through the unique values, we see a few interesting ones such as Selangor - 389, Selangor - 360, Kuala Lumpur - Others, Selangor - 517, Selangor - 639
+
+```{r}
+suspicious_location <- c('Selangor - 389', 'Selangor - 360', 'Kuala Lumpur - Others', 'Selangor - 517', 'Selangor - 639')
+
+df[df$location %in% suspicious_location,]
+
+df %>%
+  filter(grepl("Ayuman", prop_name))
+```
+```{r}
+# Investigating number of rooms
+unique(df$rooms)
+
+df <- df %>%
+  mutate(
+    rooms = case_when(
+      rooms == "More than 10" ~ 10L,                 # Convert "more than 10" to integer 10
+      TRUE ~ as.integer(rooms)                      # Otherwise, convert to integer
+    )
+  )
+
+df[df$rooms >= 6,]
+df[!df$ads_id %in% c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122),]
+```
+Interestingly, we see quite a varying number of rooms ranging from 1 to 10, usually a unit is available in 2 - 5 rooms, hence let us investigate the other values.
+From the rows, we could see that some units have 6 or more rooms despite only having size less than 2000 sq. ft., hence we will exclude ads_id %in$ c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122)
+
+For the column *parking*, we decide to use kNN imputation.
