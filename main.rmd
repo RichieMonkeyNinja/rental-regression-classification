@@ -46,7 +46,7 @@ library(stringr)
 ```
 
 ```{r}
-setwd('C:/Users/Richie.teoh/Downloads/UM/WQD7004/assignment')
+#setwd('C:/Users/Richie.teoh/Downloads/UM/WQD7004/assignment')
 df <- read.csv('mudah-apartment-kl-selangor.csv')
 df
 ```
@@ -200,3 +200,107 @@ Interestingly, we see quite a varying number of rooms ranging from 1 to 10, usua
 From the rows, we could see that some units have 6 or more rooms despite only having size less than 2000 sq. ft., hence we will exclude ads_id %in$ c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122)
 
 For the column *parking*, we decide to use kNN imputation.
+
+<h3> Feature Engineering </h3>
+Insert the ```library(ggmap)``` to get the distance from porperty address to the famous location locate in KL.
+
+```{r}
+df$full_location <- paste0(df$location, ",", df$prop_name)
+
+# Get the unique values (Reduce the computation resource)
+unique_locations <- unique(df$full_location)
+
+# Print the unique locations
+head(unique_locations) #3019 rows
+```
+
+
+Below is the R code, that connecting with the Google Routes API. Setup with the Google Maps library ggmap, then set up the destination location starting from property location (unique_locations). After that, using expand_grid to combine all of the location in total will be 9057 (3*3019) then running by for-loop looping all of the property location by using mapdist which return the distance between the two location in a driving model. The result will be save into a list, after that using bind_rows combine all of the inner element (data frame) into a final table. Is important to setyp the try-catch and system sleep to handle the error such as location can't be found then directly pause the for-loop function and using system sleep to reduce to overwhelmed due to lack data calling from API.
+
+```R
+R code of finding the distance from the two location.
+
+library(ggmap)
+library(dplyr)
+library(dplyr)
+library(tidyr) # For expand_grid
+register_google(key = "API KEY") #Google Map API Key
+
+#Set the destination location for the KL hotspot
+destination_addresses <- c(
+  "Kuala Lumpur, TRX",
+  "Kuala Lumpur City Centre",
+  "Bukit Bintang, Kuala Lumpur"
+)
+
+all_od_pairs <- expand_grid(
+  origin = unique_locations,
+  destination = destination_addresses
+)
+
+results_list <- list()
+
+for (i in 1:nrow(all_od_pairs)) {
+  current_origin <- all_od_pairs$origin[i]
+  current_destination <- all_od_pairs$destination[i]
+  
+  print(paste0("Calculating route from '", current_origin, "' to '", current_destination, "'"))
+  tryCatch({
+     route_info_pair <- mapdist(from = current_origin, to = current_destination, mode = "driving")
+     results_list[[i]] <- route_info_pair
+     Sys.sleep(0.5) # Pause for 0.5 seconds to avoid rate limits (adjust as needed)
+  }, 
+  error = function(e) #In case, the location can't be found
+  {
+    message("Error calculating route: ", e$message)
+    results_list[[i]] <- data.frame(from = current_origin, to = current_destination, km = NA, 
+                                   hours = NA, error = e$message)
+  })
+ }
+
+ final_route_df <- bind_rows(results_list)
+ print(final_route_df)
+```
+
+Saving final_route_df into "property_route.csv", then read saving into data frame. Each time calling the API will increase the time consumption and computer computation resource, by saving into the csv file able to reduce it.
+```{r}
+df_property_route <- read.csv('property_route.csv')
+head(df_property_route)
+```
+
+
+```{r}
+df_property_distance <- df_property_route %>%
+  select(from, to, km) %>% #Select the key attribute (from, to, km)
+  pivot_wider(             #Splitting the km between the two location to each column by using pivot_wider
+    names_from = to,       
+    values_from = km,     
+    names_prefix = "distance_to_" 
+  )
+
+#Rename the columns
+df_property_distance <- df_property_distance %>%
+  rename(
+    distance_to_TRX = `distance_to_Kuala Lumpur, TRX`,
+    distance_to_KLCC = `distance_to_Kuala Lumpur City Centre`,
+    distance_to_BukitBintang = `distance_to_Bukit Bintang, Kuala Lumpur`
+  )
+
+# Mapping the distance into the "df" data frame, searching the matching full_location with the "from"
+df <- df %>%
+  left_join(df_property_distance, by = c("full_location" = "from"))
+
+head(df)
+```
+
+To get the avearge distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
+```{r}
+df <- df %>%
+  mutate(
+    Popular_location_distance = rowMeans( #Calculate the mean for each distance (row)
+      select(., distance_to_TRX, distance_to_KLCC, distance_to_BukitBintang),
+      na.rm = TRUE #Skipping the empty value, select valid numberic value
+    )
+  )
+head(df)
+```
