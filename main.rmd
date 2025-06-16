@@ -30,11 +30,11 @@ Angeline Tan Jie Lin ()
 
 # **1 Objectives**
 
-Title: 
+## Title: 
 
 - Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
 
-Project Goal:
+## Project Goal:
 
 - There are two (2) goals we wish to achieve with this project:
 1) *Prediction of Rental Prices*: We aim to estimate the rental price of a property based on factors like location, size, amenities. An accurate estimate will help potential renters such as students and workers to get a fair market value.
@@ -46,9 +46,8 @@ library(stringr)
 ```
 
 ```{r}
-#setwd('C:/Users/Richie.teoh/Downloads/UM/WQD7004/assignment')
 df <- read.csv('mudah-apartment-kl-selangor.csv')
-df
+head(df)
 ```
 
 ```{r}
@@ -86,7 +85,7 @@ metadata <- tibble(
 )
 
 # Print the metadata table
-print(metadata)
+metadata
 ```
 From the metadata extracted from Kaggle above:
 - ads_id should be dropped as it is a unique identifier for the Mudah rental listing.
@@ -95,12 +94,18 @@ From the metadata extracted from Kaggle above:
 - monthly_rent is saved as chr type due to the "RM" prefixes, will perform appropriate data transformation.
 - size is saved as chr type due to the "sq. ft." suffixes, will perform appropriate data transformation.
 
+
+## Data Pre-processing
+
+1) Filter only "serviced residences" and "condo", reduce noises for model, capturing only condo data.
+2) Remove Duplicates by ads_id, keeping only the row that contains least NA across the columns
 ```{r}
 # Data Pre-processing
 
-# Keep only serviced residences and condo
+# Filter only serviced residences and condo
 df <- df %>%
   filter(.data[['property_type']] %in% c('Service Residence','Condominium'))
+
 # Check and Remove duplicated values.
 duplicates_only <- df %>%
   filter(duplicated(df) | duplicated(df, fromLast = TRUE)) %>%
@@ -110,10 +115,9 @@ duplicates_ads_id <- df %>%
   filter(duplicated(df['ads_id']) | duplicated(df['ads_id'], fromLast = TRUE)) %>%
   arrange(ads_id)
 
-duplicates_only
-duplicates_ads_id
+head(duplicates_only)
+head(duplicates_ads_id)
 ```
-Interestingly, despite *ads_id* being the unique identifier for the rental listing, duplicated(df) does not yield the same result as duplicated(df['ads_id']). Hence, we will only keep the row that contains the most information, or the first one should both rows contain the same amount of information.
 
 ```{r}
 # Removing Duplicates
@@ -138,10 +142,9 @@ df[is.na(df['completion_year']),]
 unique(df[is.na(df['completion_year']),]$prop_name)
 ```
 
-
-## Data Transformation
+## Data Cleaning
 ```{r}
-# Data Transformation
+# Data Cleaning
 
 # 1) Removing prefix 'RM' and suffix 'per month' from monthly rent, removing white spaces from 1 700, and convert to numeric type.
 df <- df %>%
@@ -199,7 +202,28 @@ df[!df$ads_id %in% c(95078151,98657827,98910302,99729522,99760048,100065541,1000
 Interestingly, we see quite a varying number of rooms ranging from 1 to 10, usually a unit is available in 2 - 5 rooms, hence let us investigate the other values.
 From the rows, we could see that some units have 6 or more rooms despite only having size less than 2000 sq. ft., hence we will exclude ads_id %in$ c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122)
 
-For the column *parking*, we decide to use kNN imputation.
+For the column *parking*, we decide to fill the NA values with 0.
+```{r}
+df$parking[is.na(df$parking)] <- 0
+```
+
+For the column *completion_year*, we decide to fill NA values via median value of the locations.
+```{r}
+df <- df %>%
+  group_by(location) %>%
+  mutate(completion_year = ifelse(is.na(completion_year), median(completion_year, na.rm = TRUE), completion_year))
+
+df_manual_prop <- read.csv('manual_prop_year.csv', header=FALSE)
+colnames(df_manual_prop) <- c('prop_name','completion_year')
+df <- df %>%
+  left_join(df_manual_prop, by = "prop_name", suffix = c("_raw", "_manual")) %>%
+  mutate(completion_year = coalesce(completion_year_raw, completion_year_manual)) %>%
+  select(-completion_year_raw, -completion_year_manual)
+
+df <- df %>%
+  mutate(completion_year = ifelse(is.na(completion_year), median(completion_year, na.rm = TRUE), completion_year))
+
+```
 
 <h3> Feature Engineering </h3>
 Insert the ```library(ggmap)``` to get the distance from porperty address to the famous location locate in KL.
@@ -293,7 +317,7 @@ df <- df %>%
 head(df)
 ```
 
-To get the avearge distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
+To get the average distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
 ```{r}
 df <- df %>%
   mutate(
@@ -304,3 +328,7 @@ df <- df %>%
   )
 head(df)
 ```
+
+```{r}
+```
+
