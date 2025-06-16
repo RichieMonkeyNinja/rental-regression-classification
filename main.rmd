@@ -8,11 +8,13 @@ output:
 date: "2025-06-01"
 ---
 
+```{=html}
 <style>
 body {
   background-color: #f7cac9;
 }
 </style>
+```
 
 ::: {style="text-align: right;"}
 Group G03
@@ -30,14 +32,15 @@ Angeline Tan Jie Lin ()
 
 # **1 Objectives**
 
-Title: 
+## Title:
 
-- Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
+-   Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
 
-Project Goal:
+## Project Goal:
 
-- There are two (2) goals we wish to achieve with this project:
-1) *Prediction of Rental Prices*: We aim to estimate the rental price of a property based on factors like location, size, amenities. An accurate estimate will help potential renters such as students and workers to get a fair market value.
+-   There are two (2) goals we wish to achieve with this project:
+
+1)  *Prediction of Rental Prices*: We aim to estimate the rental price of a property based on factors like location, size, amenities. An accurate estimate will help potential renters such as students and workers to get a fair market value.
 
 ```{r}
 library(tidyverse)
@@ -46,9 +49,8 @@ library(stringr)
 ```
 
 ```{r}
-#setwd('C:/Users/Richie.teoh/Downloads/UM/WQD7004/assignment')
 df <- read.csv('mudah-apartment-kl-selangor.csv')
-df
+head(df)
 ```
 
 ```{r}
@@ -86,21 +88,23 @@ metadata <- tibble(
 )
 
 # Print the metadata table
-print(metadata)
+metadata
 ```
-From the metadata extracted from Kaggle above:
-- ads_id should be dropped as it is a unique identifier for the Mudah rental listing.
-- prop_name can influence the rental price, for example properties under well-known developers such as Arte tend to be higher-priced; however, it does not generalize well and unseen property names might cause issues in the model. Henceforth, we decide to drop this variable as well.
-- completion_year includes some NA values, will investigate further, completion_year contributes to the price and the info are usually available online, hence we will impute it manually from data found online.
-- monthly_rent is saved as chr type due to the "RM" prefixes, will perform appropriate data transformation.
-- size is saved as chr type due to the "sq. ft." suffixes, will perform appropriate data transformation.
+
+From the metadata extracted from Kaggle above: - ads_id should be dropped as it is a unique identifier for the Mudah rental listing. - prop_name can influence the rental price, for example properties under well-known developers such as Arte tend to be higher-priced; however, it does not generalize well and unseen property names might cause issues in the model. Henceforth, we decide to drop this variable as well. - completion_year includes some NA values, will investigate further, completion_year contributes to the price and the info are usually available online, hence we will impute it manually from data found online. - monthly_rent is saved as chr type due to the "RM" prefixes, will perform appropriate data transformation. - size is saved as chr type due to the "sq. ft." suffixes, will perform appropriate data transformation.
+
+## Data Pre-processing
+
+1)  Filter only "serviced residences" and "condo", reduce noises for model, capturing only condo data.
+2)  Remove Duplicates by ads_id, keeping only the row that contains least NA across the columns
 
 ```{r}
 # Data Pre-processing
 
-# Keep only serviced residences and condo
+# Filter only serviced residences and condo
 df <- df %>%
   filter(.data[['property_type']] %in% c('Service Residence','Condominium'))
+
 # Check and Remove duplicated values.
 duplicates_only <- df %>%
   filter(duplicated(df) | duplicated(df, fromLast = TRUE)) %>%
@@ -110,10 +114,9 @@ duplicates_ads_id <- df %>%
   filter(duplicated(df['ads_id']) | duplicated(df['ads_id'], fromLast = TRUE)) %>%
   arrange(ads_id)
 
-duplicates_only
-duplicates_ads_id
+head(duplicates_only)
+head(duplicates_ads_id)
 ```
-Interestingly, despite *ads_id* being the unique identifier for the rental listing, duplicated(df) does not yield the same result as duplicated(df['ads_id']). Hence, we will only keep the row that contains the most information, or the first one should both rows contain the same amount of information.
 
 ```{r}
 # Removing Duplicates
@@ -130,18 +133,18 @@ df <- cleaned_df
 
 # 
 ```
+
 ## Check for Missing Data and Imputation
+
 ```{r}
 sum(is.na(df))
 colSums(is.na(df))
-df[is.na(df['completion_year']),]
-unique(df[is.na(df['completion_year']),]$prop_name)
 ```
 
+## Data Cleaning
 
-## Data Transformation
 ```{r}
-# Data Transformation
+# Data Cleaning
 
 # 1) Removing prefix 'RM' and suffix 'per month' from monthly rent, removing white spaces from 1 700, and convert to numeric type.
 df <- df %>%
@@ -165,12 +168,13 @@ df[is.na(df$monthly_rent),]
 df <- df %>%
   filter(!is.na(monthly_rent))
 ```
-Interesting case, Affina Bay is located in Butterworth but included in this webscrapped Klang Valley Mudah listing.
-Henceforth, we will take more time to clean the data properly based on the listing's location.
+
+Interesting case, Affina Bay is located in Butterworth but included in this webscrapped Klang Valley Mudah listing. Henceforth, we will take more time to clean the data properly based on the listing's location.
 
 ```{r}
 unique(df['location'])
 ```
+
 Going through the unique values, we see a few interesting ones such as Selangor - 389, Selangor - 360, Kuala Lumpur - Others, Selangor - 517, Selangor - 639
 
 ```{r}
@@ -181,6 +185,7 @@ df[df$location %in% suspicious_location,]
 df %>%
   filter(grepl("Ayuman", prop_name))
 ```
+
 ```{r}
 # Investigating number of rooms
 unique(df$rooms)
@@ -196,13 +201,43 @@ df <- df %>%
 df[df$rooms >= 6,]
 df[!df$ads_id %in% c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122),]
 ```
-Interestingly, we see quite a varying number of rooms ranging from 1 to 10, usually a unit is available in 2 - 5 rooms, hence let us investigate the other values.
-From the rows, we could see that some units have 6 or more rooms despite only having size less than 2000 sq. ft., hence we will exclude ads_id %in$ c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122)
 
-For the column *parking*, we decide to use kNN imputation.
+Interestingly, we see quite a varying number of rooms ranging from 1 to 10, usually a unit is available in 2 - 5 rooms, hence let us investigate the other values. From the rows, we could see that some units have 6 or more rooms despite only having size less than 2000 sq. ft., hence we will exclude ads_id %in\$ c(95078151,98657827,98910302,99729522,99760048,100065541,100013966,100303122)
 
-<h3> Feature Engineering </h3>
-Insert the ```library(ggmap)``` to get the distance from porperty address to the famous location locate in KL.
+For the column *parking*, we decide to fill the NA values with 0.
+
+```{r}
+df$parking[is.na(df$parking)] <- 0
+```
+
+For the column *completion_year*, we decide to fill NA values via median value of the locations.
+
+```{r}
+df <- df %>%
+  group_by(location) %>%
+  mutate(completion_year = ifelse(is.na(completion_year), median(completion_year, na.rm = TRUE), completion_year))
+
+df_manual_prop <- read.csv('manual_prop_year.csv', header=FALSE)
+colnames(df_manual_prop) <- c('prop_name','completion_year')
+df <- df %>%
+  left_join(df_manual_prop, by = "prop_name", suffix = c("_raw", "_manual")) %>%
+  mutate(completion_year = coalesce(completion_year_raw, completion_year_manual)) %>%
+  select(-completion_year_raw, -completion_year_manual)
+
+global_median_year <- median(df$completion_year, na.rm = TRUE)
+
+df <- df %>%
+  mutate(completion_year = coalesce(completion_year, global_median_year))
+```
+## Final results after Cleaning
+```{r}
+colSums(is.na(df))
+```
+
+
+<h3>Feature Engineering</h3>
+
+Insert the `library(ggmap)` to get the distance from porperty address to the famous location locate in KL.
 
 ```{r}
 df$full_location <- paste0(df$location, ",", df$prop_name)
@@ -214,10 +249,9 @@ unique_locations <- unique(df$full_location)
 head(unique_locations) #3019 rows
 ```
 
+Below is the R code, that connecting with the Google Routes API. Setup with the Google Maps library ggmap, then set up the destination location starting from property location (unique_locations). After that, using expand_grid to combine all of the location in total will be 9057 (3\*3019) then running by for-loop looping all of the property location by using mapdist which return the distance between the two location in a driving model. The result will be save into a list, after that using bind_rows combine all of the inner element (data frame) into a final table. Is important to setyp the try-catch and system sleep to handle the error such as location can't be found then directly pause the for-loop function and using system sleep to reduce to overwhelmed due to lack data calling from API.
 
-Below is the R code, that connecting with the Google Routes API. Setup with the Google Maps library ggmap, then set up the destination location starting from property location (unique_locations). After that, using expand_grid to combine all of the location in total will be 9057 (3*3019) then running by for-loop looping all of the property location by using mapdist which return the distance between the two location in a driving model. The result will be save into a list, after that using bind_rows combine all of the inner element (data frame) into a final table. Is important to setyp the try-catch and system sleep to handle the error such as location can't be found then directly pause the for-loop function and using system sleep to reduce to overwhelmed due to lack data calling from API.
-
-```R
+``` r
 R code of finding the distance from the two location.
 
 library(ggmap)
@@ -263,11 +297,11 @@ for (i in 1:nrow(all_od_pairs)) {
 ```
 
 Saving final_route_df into "property_route.csv", then read saving into data frame. Each time calling the API will increase the time consumption and computer computation resource, by saving into the csv file able to reduce it.
+
 ```{r}
 df_property_route <- read.csv('property_route.csv')
 head(df_property_route)
 ```
-
 
 ```{r}
 df_property_distance <- df_property_route %>%
@@ -293,7 +327,8 @@ df <- df %>%
 head(df)
 ```
 
-To get the avearge distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
+To get the average distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
+
 ```{r}
 df <- df %>%
   mutate(
@@ -302,5 +337,12 @@ df <- df %>%
       na.rm = TRUE #Skipping the empty value, select valid numberic value
     )
   )
+head(df)
+```
+
+```{r}
+df <- df %>%
+  mutate(near_public_transport = as.integer(grepl("Near KTM/LRT", additional_facilities, ignore.case = TRUE)))
+
 head(df)
 ```
