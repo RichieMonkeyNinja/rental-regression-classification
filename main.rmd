@@ -46,6 +46,8 @@ Angeline Tan Jie Lin ()
 library(tidyverse)
 library(dplyr)
 library(stringr)
+library(ggplot2)
+library(reshape2)
 ```
 
 ```{r}
@@ -235,7 +237,7 @@ colSums(is.na(df))
 ```
 
 
-<h3>Feature Engineering</h3>
+## Feature Engineering
 
 Insert the `library(ggmap)` to get the distance from porperty address to the famous location locate in KL.
 
@@ -255,7 +257,6 @@ Below is the R code, that connecting with the Google Routes API. Setup with the 
 R code of finding the distance from the two location.
 
 library(ggmap)
-library(dplyr)
 library(dplyr)
 library(tidyr) # For expand_grid
 register_google(key = "API KEY") #Google Map API Key
@@ -303,6 +304,29 @@ df_property_route <- read.csv('property_route.csv')
 head(df_property_route)
 ```
 
+Searching from the missing distance between the two locations, manually adding the location.
+
+```{r}
+print(paste0("Missing value:", colSums(is.na(df_property_route))))
+
+df_missing_route <- which(apply(is.na(df_property_route), 1, any))
+df_property_route[df_missing_route,]
+
+df_insert_missing_from <- data.frame(
+  from = c("Kuala Lumpur - Kepong,Greenview Apartments", "Kuala Lumpur - Kepong,", 
+           "Kuala Lumpur - Kepong,Aman Dua",
+           "Kuala Lumpur - Kepong,Saujana Ria Aparment",
+           "Kuala Lumpur - Kepong,Sri Saujana Apartment (Wangsa Permai)",
+           "Kuala Lumpur - Kepong,VIM 3 @ Desa Park North",
+           "Kuala Lumpur - Kepong,opal flat"),
+  distance_to_TRX = c(12.6, 16.2, 20.2, 20.8, 20.8, 17.7, 18.2),
+  distance_to_KLCC = c(9.9, 13.5, 16.9, 17.6, 17.6, 15.2, 14.7),
+  distance_to_BukitBintang = c(11.8, 15.5, 19.4, 20.1, 20.1, 16.9, 16.6)
+)
+df_insert_missing_from
+```
+
+Storing the searching route result into main data frame (df).
 ```{r}
 df_property_distance <- df_property_route %>%
   select(from, to, km) %>% #Select the key attribute (from, to, km)
@@ -320,6 +344,21 @@ df_property_distance <- df_property_distance %>%
     distance_to_BukitBintang = `distance_to_Bukit Bintang, Kuala Lumpur`
   )
 
+#Checking the missing value before implement replacement
+print(paste0("Before Implement Replacement for Missing value:", colSums(is.na(df_property_distance))))
+
+df_property_distance_new <- data.frame(df_property_distance) #Make a copy
+
+#Drop all of the NA value
+df_property_distance_new <- df_property_distance_new %>%
+  drop_na(distance_to_TRX, distance_to_KLCC, distance_to_BukitBintang)
+
+#Merge the replacement data frame with the copy of property distance data frame
+df_property_distance <- bind_rows(df_property_distance_new, df_insert_missing_from)
+
+#Check missing value after replacement
+print(paste0("After Implement Replacement for Missing value:", colSums(is.na(df_property_distance))))
+
 # Mapping the distance into the "df" data frame, searching the matching full_location with the "from"
 df <- df %>%
   left_join(df_property_distance, by = c("full_location" = "from"))
@@ -330,19 +369,198 @@ head(df)
 To get the average distance, we will using rowMeans() function to calculate the distance from each row then result in a popular_location_distance column.
 
 ```{r}
-df <- df %>%
+df_import_PopularLocation <- data.frame(df) #Make a copy
+
+df_import_PopularLocation <- df_import_PopularLocation %>%
   mutate(
     Popular_location_distance = rowMeans( #Calculate the mean for each distance (row)
       select(., distance_to_TRX, distance_to_KLCC, distance_to_BukitBintang),
       na.rm = TRUE #Skipping the empty value, select valid numberic value
     )
   )
+df <- df_import_PopularLocation
 head(df)
 ```
 
 ```{r}
 df <- df %>%
   mutate(near_public_transport = as.integer(grepl("Near KTM/LRT", additional_facilities, ignore.case = TRUE)))
-
 head(df)
+```
+
+
+# EDA
+```{r}
+df_EDA = data.frame(df) #Make a copy for EDA
+head(df_EDA)
+```
+
+## Univariate Analysis
+
+### Histogram of Monthly Rent
+This section shows a histogram of monthly rent. It is split into > 5,000 (MYR) and < 5,000 (MYR) parts. Based on the summary results, the upper bound is about 2,100 (MYR), therefore splitting into parts below 5,000 (MYR) able provides a clearer visualization.
+```{r}
+hist_data <- (df_EDA$monthly_rent)
+summary(hist_data) #Show the summary
+
+hist_data_below <- hist_data[hist_data < 5000]
+
+hist(
+  hist_data_below, xlab = "Monthly Rent (MYR)", main = "Monthly Rent Distribution (< 5k)",
+  col = "#A8E4A0", border = "black", breaks = 40
+)
+
+hist_data_above <- hist_data[hist_data > 5000]
+
+hist(
+  hist_data_above, xlab = "Monthly Rent (MYR)", main = "Monthly Rent Distribution (> 5k)",
+  col = "#A8E4A0", border = "black", breaks = 20
+)
+
+
+```
+### Histogram of Property Size
+This section shows a histogram of size. It is split into > 3,000 (sq ft) and < 3,000 (sq ft) parts. Based on the summary results, the upper bound is about 1,100 (sq ft), therefore splitting into parts below 3,000 (sq ft) can provides a clearer visualization.
+```{r}
+hist_data_size <- (df_EDA$size)
+summary(hist_data_size) #Show the summary
+
+
+hist_data_size_below <- hist_data_size[hist_data_size < 3000]
+
+hist(
+  hist_data_size_below, xlab = "Property Size (sq ft)", main = "Property Size Distribution (< 3,000)",
+  col = "#A8E4A0", border = "black", breaks = 30
+)
+
+hist_data_size_above <- hist_data_size[hist_data_size > 3000]
+
+hist(
+  hist_data_size_above, xlab = "Property Size (sq ft)", main = "Monthly Rent Distribution (> 3,000)",
+  col = "#A8E4A0", border = "black", breaks = 60
+)
+
+```
+### Horizontal Bar Chart
+This section plot horizontal bar graphs to illustrate the frequency/count of each nominal or ordinal data.
+```{r}
+plot_bar_chart_char <- function(bar_chart_columns) {
+  
+  for (col in bar_chart_columns) {
+    counts_data <- df_EDA[[col]]
+  
+    unique(df_EDA$col)
+    
+    # Count occurrences
+    category_counts <- table(counts_data)
+    
+    # Plot horizontal bar chart
+    barplot(category_counts,
+            horiz = TRUE,
+            col = "skyblue",
+            main = paste(col, "Distribution"),
+            xlab = "Count")
+  }
+}
+
+bar_chart_columns <- c("parking", "property_type", "rooms", "bathroom", "completion_year", "near_public_transport")
+plot_bar_chart_char(bar_chart_columns)
+
+```
+
+## Multivariate Analysis
+
+### Scatter Plot - Two Relationship
+In this section, we will use a scatter plot to understand the relationship between monthly rent and property size. The scatter plot is filtered based on the upper range to provide a clear visualization.
+```{r}
+# Filter the data
+Scatter_data_filter <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000, ]
+
+# Create ggplot scatter plot
+ggplot(Scatter_data_filter, aes(x = monthly_rent, y = size)) +
+  geom_point(color = "#4682B4", alpha = 0.6, size = 2) +
+  labs(
+    title = "Monthly Rent vs Property Size (< 3,000 sq ft & < RM5,000)",
+    x = "Monthly Rent (MYR)",
+    y = "Property Size (sq ft)"
+  ) +
+  theme_minimal()
+```
+
+In this section, we will use a scatter plot to understand the relationship between monthly rent and average popular location distance to KLCC, TRX and Bukit Bintang. The scatter plot is filtered based on the upper range to provide a clear visualization.
+```{r}
+# Filter the data
+Scatter_data_filter <- df_EDA[df_EDA$Popular_location_distance < 60 & df_EDA$monthly_rent < 5000, ]
+
+# Create ggplot scatter plot
+ggplot(Scatter_data_filter, aes(x = monthly_rent, y = Popular_location_distance)) +
+  geom_point(color = "#4682B4", alpha = 0.6, size = 2) +
+  labs(
+    title = "Monthly Rent vs Popular location distance ( <60KM & < RM5,000)",
+    x = "Monthly Rent (MYR)",
+    y = "Popular location distance (KM)"
+  ) +
+  theme_minimal()
+```
+
+### Scatter Plot - Three Relationship
+This section aims to understand the relationship between monthly rent, the average distance of the property location from popular locations, and the size of the property. Through the chart, we can understand whether the monthly rent is affected by distance and property size.
+
+Below is the diagram, if the distance is above 30 km
+
+```{r}
+filtered_data <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000 & df_EDA$Popular_location_distance > 30, ]
+
+ggplot(filtered_data, aes(x = monthly_rent, y = size)) +
+  geom_point(aes(color = Popular_location_distance, size = Popular_location_distance), alpha = 0.6) +
+  scale_color_gradient(low = "#4682B4", high = "#C68181") +
+  labs(
+    title = "Rent vs Size colored by Distance to Popular Location",
+    x = "Monthly Rent (MYR)",
+    y = "Property Size (sq ft)",
+    color = "Distance (km)",
+    size = "Distance (km)"
+  ) +
+  theme_minimal()
+```
+
+Below is the diagram, if the distance is below 30 km
+```{r}
+filtered_data <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000 & df_EDA$Popular_location_distance < 30, ]
+
+ggplot(filtered_data, aes(x = monthly_rent, y = size)) +
+  geom_point(aes(color = Popular_location_distance, size = Popular_location_distance), alpha = 0.6) +
+  scale_color_gradient(low = "#4682B4", high = "#C68181") +
+  labs(
+    title = "Rent vs Size colored by Distance to Popular Location",
+    x = "Monthly Rent (MYR)",
+    y = "Property Size (sq ft)",
+    color = "Distance (km)",
+    size = "Distance (km)"
+  ) +
+  theme_minimal()
+```
+
+## Correlation Matrix
+This section showcase a correlation matrix between each feature.
+```{r}
+heatmap_data <- df_EDA %>%
+  select(where(is.numeric)) #Select only numeric data (remove such as prop_name, e.g.)
+
+heatmap_data <- heatmap_data %>% select(-ads_id)  #Remove ads_id
+
+corr_data <- cor(heatmap_data, use = "complete.obs") #Transfer into numeric (-1 , 1)
+melted_corr <- melt(corr_data) #into a format for ggplot
+heap_map_color <- colorRampPalette(c("skyblue", "white", "#cc474b"))(200)
+
+# Plot
+ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value,2)), size = 3) +
+  scale_fill_gradientn(colors = heap_map_color, limits = c(-1, 1)) +
+  labs(title = "Correlation Matrix", x = NULL, y = NULL) + #Add NULL else will have Var2 and Var1
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
+  )
 ```
