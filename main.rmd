@@ -17,32 +17,59 @@ body {
 ```
 
 ::: {style="text-align: right;"}
-Group G03
+WQD7004 Group Project - OCC1 - Group G03
 
 Richie Teoh (24088171)\
-Elmer Lee (2408236)\
+Elmer Lee Jia Zhao (2408236)\
 Micole Chung Syn Tung (24073625)\
-Lee Re Xuan ()\
-Angeline Tan Jie Lin ()
+Lee Re Xuan (24071969)\
+Angeline Tan Jie Lin (24084444)
 
 01 June 2025
 :::
 
 ------------------------------------------------------------------------
 
-# **1 Objectives**
+# **1. Introduction**
+
+As Kuala Lumpur and Selangor continue to develop, they attract many young professionals and individuals from other states seeking better career opportunities. With the rising cost of living—particularly in Kuala Lumpur—renting has become a more practical choice, especially for newcomers to the urban workforce.
+
+Proximity to public transport such as LRT, MRT, and KTM is a key factor in rental decisions, helping tenants save on transport costs. Rental prices vary widely depending on location, unit size, furnishing, and amenities. For instance, apartments in Bangsar South typically start from RM2,000 (PropertyGuru, 2024; EdgeProp, 2024).
+
+This project analyzes apartment rental listings from *mudah.my* in Kuala Lumpur and Selangor to uncover key pricing patterns. A regression model will be used to predict rental prices, while a classification model will explore furnishing status based on property features. The findings aim to support better decision-making for both tenants and property owners.
 
 ## Title:
 
 -   Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
 
+## Questions:
+
+-   The purpose of processing this dataset is to identify and understand the factors that influence apartment rental prices in Kuala Lumpur and Selangor. By analyzing various features of rental listings, such as property size, location, number of rooms, furnishing status, and proximity to transportation, the project aims to uncover patterns within the rental market and derive predictive insights.
+
+    This project focuses on addressing two key analytical questions:
+
+    1.  What are the key factors that influence rental prices, and how can rental prices be predicted using property features?
+
+    ```         
+    -   This question is approached using regression analysis. The objective is to construct a predictive model that estimates rental prices based on selected variables such as square footage, number of bedrooms, floor level, and furnishing status. The model is intended to provide a quantitative understanding of how each feature contributes to pricing, and to enable estimation of rental prices for new listings.
+    ```
+
+    2.  Can the furnishing status of an apartment (i.e., fully furnished, partially furnished, or unfurnished) be predicted based on other property characteristics?
+
+    ```         
+    -   This question is addressed using classification techniques. The objective is to develop a model that classifies rental listings into one of the three furnishing categories based on features such as rental price, location, property size, and number of bedrooms and bathrooms. This classification provides insights into the relationship between apartment features and furnishing status, and may support both tenant preferences and market supply analysis.
+    ```
+
 ## Project Goal:
 
--   There are two (2) goals we wish to achieve with this project:
+-   This project aims to analyze apartment rental listings from Kuala Lumpur and Selangor using data sourced from *mudah.my*. The main objectives are:
 
-1)  *Prediction of Rental Prices*: We aim to estimate the rental price of a property based on factors like location, size, amenities. An accurate estimate will help potential renters such as students and workers to get a fair market value.
+1)  To clean and preprocess the dataset to ensure consistency, accuracy, and readiness for analysis by handling missing values, formatting issues, and irrelevant variables.
+2)  To develop a regression model that predicts apartment rental prices based on key property features such as size, location, number of rooms, and furnishing status.
+3)  To develop a classification model that predicts the furnishing status of an apartment unit (i.e. fully furnished, partially furnished, or unfurnished) based on property features such as size, location, number of bedrooms, and rental price.
 
 ```{r}
+# Load required libraries for data manipulation, visualization, and machine learning
 library(tidyverse)
 library(dplyr)
 library(stringr)
@@ -54,11 +81,13 @@ library(lightgbm)
 ```
 
 ```{r}
+# Load the dataset
 df <- read.csv('mudah-apartment-kl-selangor.csv')
 head(df)
 ```
 
 ```{r}
+# Create a metadata table describing each key column
 metadata <- tibble(
   Column_Name = c(
     "ads_id",
@@ -100,8 +129,7 @@ From the metadata extracted from Kaggle above: - ads_id should be dropped as it 
 
 ## Data Pre-processing
 
-1)  Filter only "serviced residences" and "condo", reduce noises for model, capturing only condo data.
-2)  Remove Duplicates by ads_id, keeping only the row that contains least NA across the columns
+The dataset was filtered to include only listings labeled as "Serviced Residences" or "Condominium" to reduce noise and focus the analysis on high-rise residential properties. Duplicate entries based on `ads_id` were removed by retaining only the row with the least number of missing values, ensuring cleaner and more reliable input for modeling.
 
 ```{r}
 # Data Pre-processing
@@ -124,12 +152,12 @@ head(duplicates_ads_id)
 ```
 
 ```{r}
-# Removing Duplicates
+# Remove duplicates based on 'ads_id'
 cleaned_df <- df %>%
   mutate(na_count = rowSums(is.na(.))) %>%
   group_by(ads_id) %>%
   arrange(na_count) %>%
-  slice(1) %>%
+  dplyr::slice(1) %>%
   ungroup() %>%
   select(-na_count)
 
@@ -141,12 +169,17 @@ df <- cleaned_df
 
 ## Check for Missing Data and Imputation
 
+To ensure data quality, the dataset was examined for missing values. The total number of missing entries and the distribution of missing data across each column were identified using `sum(is.na(df))` and `colSums(is.na(df))`. This step provides insight into the completeness of the dataset and informs whether imputation or removal is necessary for affected variables.
+
 ```{r}
+# Check for missing values in the entire dataset and by individual columns
 sum(is.na(df))
 colSums(is.na(df))
 ```
 
 ## Data Cleaning
+
+This step involves cleaning text-based numeric fields (`monthly_rent` and `size`) by removing prefixes, suffixes, and formatting characters, then converting them into numeric types. Rows with missing rental prices were removed, as this value is essential for price prediction. Additionally, listings with missing `completion_year` were inspected for possible further handling.
 
 ```{r}
 # Data Cleaning
@@ -167,9 +200,13 @@ df <- df%>%
     size = as.numeric(size)
   )
 
+# Check which listings have missing 'completion_year'
 unique(df[is.na(df$completion_year), "prop_name"])
+
+# Check rows with missing 'monthly_rent'
 df[is.na(df$monthly_rent),]
 
+# Remove rows with missing 'monthly_rent'
 df <- df %>%
   filter(!is.na(monthly_rent))
 ```
@@ -177,16 +214,20 @@ df <- df %>%
 Interesting case, Affina Bay is located in Butterworth but included in this webscrapped Klang Valley Mudah listing. Henceforth, we will take more time to clean the data properly based on the listing's location.
 
 ```{r}
+# Check all unique values in the 'location' column
 unique(df['location'])
 ```
 
-Going through the unique values, we see a few interesting ones such as Selangor - 389, Selangor - 360, Kuala Lumpur - Others, Selangor - 517, Selangor - 639
+While reviewing the unique values in the `location` column, several entries appear inconsistent or non-standard, such as *"Selangor - 389"*, *"Selangor - 517"*, and *"Kuala Lumpur - Others"*.
 
 ```{r}
+# Identify suspicious or unclear location values
 suspicious_location <- c('Selangor - 389', 'Selangor - 360', 'Kuala Lumpur - Others', 'Selangor - 517', 'Selangor - 639')
 
+# View all rows with those suspicious location values
 df[df$location %in% suspicious_location,]
 
+# Check if any property names contain the word "Ayuman"
 df %>%
   filter(grepl("Ayuman", prop_name))
 ```
@@ -218,31 +259,43 @@ df$parking[is.na(df$parking)] <- 0
 For the column *completion_year*, we decide to fill NA values via median value of the locations.
 
 ```{r}
+# Impute missing 'completion_year' values using the median year within the same location group
 df <- df %>%
   group_by(location) %>%
   mutate(completion_year = ifelse(is.na(completion_year), median(completion_year, na.rm = TRUE), completion_year))
 
+
+# Load manually collected property names and their completion years
 df_manual_prop <- read.csv('manual_prop_year.csv', header=FALSE)
 colnames(df_manual_prop) <- c('prop_name','completion_year')
+
+
+# Merge manual data with main dataset and update 'completion_year' where manual values are available
 df <- df %>%
   left_join(df_manual_prop, by = "prop_name", suffix = c("_raw", "_manual")) %>%
   mutate(completion_year = coalesce(completion_year_raw, completion_year_manual)) %>%
   select(-completion_year_raw, -completion_year_manual)
 
+
+# Use global median to fill any remaining missing 'completion_year'
 global_median_year <- median(df$completion_year, na.rm = TRUE)
 
 df <- df %>%
   mutate(completion_year = coalesce(completion_year, global_median_year))
 ```
+
 ## Final results after Cleaning
+
+After applying all cleaning steps, the dataset is free from duplicates and missing values in key fields such as `monthly_rent`, `size`, and `completion_year`. Inconsistent entries were filtered or corrected, and numeric fields were standardized for analysis. The cleaned dataset is now ready for exploratory analysis and modeling.
+
 ```{r}
+# Check the number of missing values in each column after data cleaning
 colSums(is.na(df))
 ```
 
-
 ## Feature Engineering
 
-Insert the `library(ggmap)` to get the distance from porperty address to the famous location locate in KL.
+The `ggmap` package is used to retrieve geographic coordinates (latitude and longitude) for each property and calculate the distance to well-known landmarks in Kuala Lumpur, such as KLCC, Bukit Bintang, and TRX. This helps capture location-based value, which is an important factor in determining rental price.
 
 ```{r}
 df$full_location <- paste0(df$location, ",", df$prop_name)
@@ -330,6 +383,7 @@ df_insert_missing_from
 ```
 
 Storing the searching route result into main data frame (df).
+
 ```{r}
 df_property_distance <- df_property_route %>%
   select(from, to, km) %>% #Select the key attribute (from, to, km)
@@ -391,8 +445,10 @@ df <- df %>%
 head(df)
 ```
 
+# Data Visualization
 
-# EDA
+Exploratory Data Analysis was performed to better understand the structure, patterns, and relationships within the dataset. This includes examining distributions of key variables, identifying correlations between features, detecting outliers, and visualizing trends that may influence rental prices and furnishing levels. The insights gained from EDA guide feature selection and model development in later stages.
+
 ```{r}
 df_EDA = data.frame(df) #Make a copy for EDA
 head(df_EDA)
@@ -400,8 +456,14 @@ head(df_EDA)
 
 ## Univariate Analysis
 
+Univariate analysis focuses on understanding the distribution and characteristics of individual variables within the dataset. This includes examining variables such as monthly rent, property size, number of rooms, and furnishing status. Visualizations like histograms, bar charts, and summary statistics are used to identify patterns, outliers, and data skewness, providing valuable insights for feature selection and modeling.
+
 ### Histogram of Monthly Rent
-This section shows a histogram of monthly rent. It is split into > 5,000 (MYR) and < 5,000 (MYR) parts. Based on the summary results, the upper bound is about 2,100 (MYR), therefore splitting into parts below 5,000 (MYR) able provides a clearer visualization.
+
+This section shows a histogram of monthly rent. The diagram below will be only consist of the monthly rent that is below than 5000 MYR (\<= 5000). Based on the summary results, the upper bound is about 2,100 (MYR), therefore splitting into parts below 5,000 (MYR) able provides a visualization on the monthly pricing, and exclude the outliers.
+
+In addition, the most common rent range as observe will be between RM1000 to RM2000 this indicate that majority of the available accommodations will be fall within this price range in KL and Selangor area. In other words, this indicate at this range are more affordable for the people.
+
 ```{r}
 hist_data <- (df_EDA$monthly_rent)
 summary(hist_data) #Show the summary
@@ -414,8 +476,13 @@ hist(
 )
 
 ```
+
 ### Histogram of Property Size
-This section shows a histogram of size. It is split into > 3,000 (sq ft) and < 3,000 (sq ft) parts. Based on the summary results, the upper bound is about 1,100 (sq ft), therefore splitting into parts below 3,000 (sq ft) can provides a clearer visualization.
+
+This section shows a histogram of size. The diagram below will be only consist of the property size that is below than 3000 sq ft (\<= 3000). Based on the summary results, the upper bound is about 1,100 (sq ft).
+
+From the observation, most of the available property/accommodation will be falls into 700 to 1200 sq ft. Commonly, the size of the property will be around 750 sq ft to 1200 sq ft. In addition, most of the property size for rent is mostly available on 800 to 900 sq ft. This shows that in urban areas, more real estate developers focus more on urban development, since largest area means highest rent.
+
 ```{r}
 hist_data_size <- (df_EDA$size)
 summary(hist_data_size) #Show the summary
@@ -428,8 +495,19 @@ hist(
 )
 
 ```
-### Bar Chart
-This section plot horizontal bar graphs to illustrate the frequency/count of each nominal or ordinal data.
+
+### Bar Chart of Property Attributes
+
+This section plot horizontal bar graphs to illustrate the frequency/count of parking, rooms, bathroom, completion_year.
+
+1.  parking: Present from 0 to 10, majority of the rent estate will be giving at least 1 car parking slot, but some provide 0 or 2 parking slot for tenant.
+
+2.  rooms: Illustrate that the accommodation/property are build as studio, single room, two room and mostly three room.
+
+3.  bathroom: Illustrate that for the majority of accommodation/property will having 2 bathroom. Since, majority of rooms is between 1 to 3, so that typically it will have 1 or 2 bathrooms.
+
+4.  completion_year: This show that massive of accommodation/property was starting arise after 2012. 2014 to 2022 is the peak period, indicating that due to the development of the city, the demand for accommodation is also rising.
+
 ```{r}
 plot_bar_chart_char <- function(bar_chart_columns) {
   
@@ -453,7 +531,11 @@ bar_chart_columns <- c("parking", "rooms", "bathroom", "completion_year")
 plot_bar_chart_char(bar_chart_columns)
 
 ```
+
 ### Pie Chart of Property Type
+
+In this project, the team will focus on two types of properties: apartments and serviced residences, as the target tenants are students and office workers. From the pie chart, can observe that the market prefers apartments more, has the largest proportion of 61.4%, while serviced residences proportion of 38.6%.
+
 ```{r}
 property_data <- df_EDA %>% count(property_type)
 
@@ -466,6 +548,9 @@ ggplot(property_data, aes(x = "", y = n, fill = property_type)) +
 ```
 
 ### Pie Chart of Near Public Transport
+
+In this pie chart, from observation can be indicate that majority of the accommodation/property are not closing to the public transport (59.7%), but 40.3% of the accommodation/properties are close to public transportation. The gap between the two is around 19%, which is not a big gap, which means that most of the accommodation/properties try to be built near public transportation.
+
 ```{r}
 near_public_transport_data <- df_EDA %>% count(near_public_transport)
 
@@ -480,7 +565,10 @@ ggplot(near_public_transport_data, aes(x = "", y = n, fill = near_public_transpo
   theme(legend.title = element_blank())
 ```
 
-### Pie Chart of Near Public Transport
+### Pie Chart of Furnished Type
+
+This pie chart illustrate the distribution of the furnished type as "Fully Furnished", "Not Furnished", and "Partially Furnished". From the observation, that most houses/properties provide tenants with fully furnished/partially furnished, with the results showing that 52.4% of accommodation/properties provide fully furnished, 38.2% of houses/properties provide partially furnished, and 9.4% of houses/properties do not provide any furniture.
+
 ```{r}
 furnished_data <- df_EDA %>% count(furnished)
 
@@ -488,14 +576,18 @@ ggplot(furnished_data, aes(x = "", y = n, fill = furnished)) +
   geom_bar(stat = "identity", width = 1) +
   coord_polar("y", start = 0) +
   geom_text(aes(label = paste0(round(n / sum(n) * 100, 1), "%")), position = position_stack(vjust = 0.5)) + 
-  labs(title = "Property Type") +
+  labs(title = "Furnished Type") +
   theme(legend.title = element_blank())
 ```
 
 ## Multivariate Analysis
 
 ### BoxPlot - Two Relationship
-In this section, we will use a scatter plot to understand the relationship between monthly rent and property size. The scatter plot is filtered based on the upper range to provide a clear visualization.
+
+In this section, the team will using boxplot to understand the relationship between monthly rent and property size. The boxplot is filtered based on the upper range to provide a clear visualization.
+
+In the diagram show below, it clearly show a positive trend as the size increase the monthly rent also getting increase. This indicate the size of the accommodation/property will be related to the rent. In addition, there is outlines above and below of the box plot suggest that some properties may be high-end listings or quick-rent properties that are older and poorly maintained.
+
 ```{r}
 #Define the bin size 
 breaks <- seq(0, 3000, by = 500)
@@ -518,7 +610,8 @@ ggplot(boxplot_data_filter, aes(x = property_size_bin, y = monthly_rent)) +
   theme(axis.text.x = element_text(hjust = 0.5))
 ```
 
-In this section, we will use a scatter plot to understand the relationship between monthly rent and average popular location distance to KLCC, TRX and Bukit Bintang. The scatter plot is filtered based on the upper range to provide a clear visualization.
+In this section, present the top 20 frequency locations that appear inside the dataset, which also reflect where the majority of the accommodation/properties are built and located. In addition, from the observation that areas like Mont Kiara or KLCC contain higher rent per month, and like Kajang, Cyberjaya, or Cheras which giving more affordable rent for lower budgets renters.
+
 ```{r}
 # Filter the data
 most_frequent_locations <- df_EDA %>%
@@ -539,6 +632,8 @@ ggplot(boxplot_data_filter, aes(x = reorder(location, monthly_rent, median), y =
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+This box plot shows the development of the property market from 1950 to 2025. Overall, from 1980 to 2025, it can be observed that the average price of monthly rental is about RM1,400 to RM1,600, while after 2015, the rental trend becomes more stable due to more new properties entering the market.
+
 ```{r}
 #Arrange completion year and < 5000 money rent
 boxplot_data_filter <- df_EDA %>%
@@ -554,7 +649,7 @@ boxplot_data_filter$completion_year <- factor(
 ggplot(boxplot_data_filter, aes(x = completion_year, y = monthly_rent)) +
   geom_boxplot(fill = "#87CEFA", color = "#4682B4", outlier.alpha = 0.3) +
   labs(
-    title = "Monthly Accommodation Rent Distribution by Year",
+    title = "Distribution of Monthly Rent Based on Property Completion Year",
     x = "Year",
     y = "Monthly Rent (MYR)"
   ) +
@@ -562,8 +657,28 @@ ggplot(boxplot_data_filter, aes(x = completion_year, y = monthly_rent)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+In this boxplot illustrate that the monlthy rents will follow the furnished to increase, it indicate that an accommodation/property with fully furnished will have the average that is above RM1,500 and for partially furnished will be around RM1,300 and above, then for not furnished the overall average will be the lowest as around RM1,000 and above. However, this also shows that for landlords, fully furnished tenants are more willing to rent out their properties because it also provides more convenience for students and workers tenants, and tenants do not need to make further purchases.
+
+```{r}
+#Filter < 5000 money rent
+boxplot_data_filter <- df_EDA %>%
+  filter(monthly_rent < 5000)
+
+ggplot(boxplot_data_filter, aes(x = reorder(furnished, monthly_rent, median), y = monthly_rent)) +
+  geom_boxplot(fill = "#87CEFA", color = "#4682B4", outlier.alpha = 0.3) +
+  labs(
+    title = "Monthly Accommodation Rent Distribution by Furnished Type",
+    x = "Furnished Type",
+    y = "Monthly Rent (MYR)"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
 ## Correlation Matrix
+
 This section showcase a correlation matrix between each feature.
+
 ```{r}
 heatmap_data <- df_EDA %>%
   select(where(is.numeric)) #Select only numeric data (remove such as prop_name, e.g.)
@@ -588,14 +703,16 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
 
 # Data Modelling
 
-As this project is focusing in 2 different targets, predicting rental prices and furnishing status, different models are used for each prediction. 
+This project involves two separate predictive tasks: estimating rental prices (a regression problem) and classifying furnishing status (a multi-class classification problem). Accordingly, different models are applied for each task to optimize performance. Regression models are used to predict continuous rental prices based on property features, while classification models are trained to categorize listings into furnishing types—fully furnished, partially furnished, or unfurnished. Each model is evaluated using appropriate performance metrics aligned with its predictive objective.
 
 ```{r}
 df_model = data.frame(df) #Make a copy for Data Modelling
 head(df_model)
 ```
 
-##Data Standardization & Label encoding
+## Data Standardization & Label encoding
+
+To prepare the data for modeling, numerical features such as rental price and property size were standardized to ensure consistent scale, improving model performance. Categorical variables like property type and furnishing status were encoded into numeric formats using label encoding, enabling them to be used effectively in machine learning algorithms. These preprocessing steps help ensure the dataset is clean, structured, and model-ready.
 
 ```{r}
 df_model <- df_model %>%
@@ -657,11 +774,13 @@ head(df_model)
 
 ## Data Splitting
 
-Data splitting is performed separately for both targets variables: monthly_rent for the regression model (predicting rental price) and furnished for the classification model (predicting furnishing status). 
+Data splitting is performed separately for both targets variables: monthly_rent for the regression model (predicting rental price) and furnished for the classification model (predicting furnishing status).
 
 The dataset is split into training and testing sets. Training sets are used to build model, while testing sets are used to evaluate the model performance. In this case, we split the data into 80% train set and 20% test set. Separate splits are created for each model according to their respective target variable.
 
 ### Regression Model (Predict Rental Price)
+
+For the regression task, the target variable was `monthly_rent`. The feature set included standardized property size, property age, furnishing status, proximity to public transport, property type, and one-hot encoded facilities. An 80% portion of the dataset was used to train the regression models, while the remaining 20% was used for testing. This split ensures that the model's performance metrics—such as RMSE, MAE, MSE, and R²—are evaluated on unseen data, providing a reliable measure of predictive accuracy.
 
 ```{r}
 #For reproducibility
@@ -672,7 +791,7 @@ split = 0.80
 
 ```
 
-Create train and test sets using createDataPartition(). This function helps to split the data in a way that reflects the targeted variables (Monthly_rent) distribution. 
+Training and testing sets were created using the `createDataPartition()` function from the **caret** package. This method ensures that the split maintains the distribution of the target variable, `monthly_rent`, allowing for a representative and balanced partition between the training and testing datasets.
 
 ```{r}
 train_index_regression <- createDataPartition(df_model$monthly_rent_standardized, p=split, list=FALSE) 
@@ -692,6 +811,8 @@ cat("X_test_regression shape:", dim(X_test_regression), "y_test_regression shape
 ```
 
 ### Classification Model (Predict Furnishing Status)
+
+For the classification task, the target variable is `furnished`, which includes three categories: fully furnished, partially furnished, and unfurnished. The goal is to predict the furnishing status of a rental unit based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Various classification algorithms were applied, and model performance was evaluated using metrics such as Accuracy, Precision, Recall, F1-Score, and the Confusion Matrix to assess how well each model distinguishes between furnishing categories.
 
 ```{r}
 #For reproducibility
@@ -718,7 +839,7 @@ cat("X_test_classification shape:", dim(X_test_classification), "y_test_classifi
 
 ## Model Training
 
-In this section, the respective training sets are used to build regression and classification models with different algorithms. 
+In this section, the respective training sets are used to build predictive models for both regression and classification tasks. Various machine learning algorithms are applied to each task to identify the most effective approach. For the regression model, algorithms aim to predict rental prices, while for the classification model, algorithms are trained to predict the furnishing status of a property. Each model is trained using the features selected during preprocessing and is later evaluated on the corresponding test set.
 
 ```{r}
 #Cross-validation 
@@ -739,11 +860,23 @@ classification_metrics <- c("Accuracy", "Precision", "Recall", "F1-score", "AUC-
 
 ### Regression Model (Predict Rental Price)
 
-For Regression models, algorithms like Linear Regression, XGBoost, LightGBM,  Decision Tree, Random Forest, Neural Networks, and CatBoost are trained to predict the rental price based on key property features such as 
+For the regression task, several machine learning algorithms were trained to predict monthly rental prices using key property features. These features include standardized property size, furnishing status, proximity to public transport, property type, property age, and available facilities. The models applied include Linear Regression, Decision Tree, Random Forest, XGBoost, LightGBM, Neural Networks, and CatBoost.
 
-# size, location, number of rooms, and furnishing status.(nned to change)+metrics
+Each model was evaluated using standard regression metrics:
+
+-   **Root Mean Squared Error (RMSE):** Measures the average magnitude of prediction errors.
+
+-   **Mean Absolute Error (MAE):** Reflects the average absolute difference between actual and predicted values.
+
+-   **Mean Squared Error (MSE):** Highlights larger errors by squaring the differences.
+
+-   **R-squared (R²):** Indicates how well the model explains the variance in rental prices.
+
+These metrics provide a comprehensive view of each model's predictive performance and help identify the most effective approach for rental price estimation.
 
 #### Linear Regression Model
+
+Linear Regression is a fundamental and interpretable algorithm used to model the relationship between a continuous target variable and one or more input features. In this case, it is used to estimate monthly rental prices based on property characteristics. The model assumes a linear relationship between the predictors and the target variable. While it serves as a good baseline model, its performance may be limited when capturing complex, non-linear patterns in the data.
 
 ```{r}
 
@@ -772,7 +905,10 @@ cat("Linear Regression MAE: ", lm_mae, "\n")
 cat("Linear Regression MSE: ", lm_mse, "\n")
 
 ```
-####XGBoost Model
+
+#### XGBoost Model
+
+XGBoost (Extreme Gradient Boosting) is a powerful ensemble learning algorithm based on gradient boosting techniques. It builds a series of decision trees where each tree corrects the errors of the previous one. XGBoost is known for its high performance, speed, and ability to handle complex relationships in data. In this project, XGBoost was used to predict monthly rental prices based on various property features. It often outperforms simpler models by capturing non-linear patterns and interactions between variables, making it suitable for structured tabular data.
 
 ```{r}
 
@@ -801,7 +937,9 @@ cat("XGBoost MSE: ", xgb_mse, "\n")
 
 ```
 
-####LightGBM Model
+#### LightGBM Model
+
+LightGBM (Light Gradient Boosting Machine) is a gradient boosting framework developed for efficiency and scalability. It uses a leaf-wise tree growth strategy, which enables faster training and improved accuracy compared to traditional level-wise approaches. In this project, LightGBM was applied to predict monthly rental prices using property-related features. It is particularly effective for handling large datasets with many features and can capture complex, non-linear relationships, making it a strong performer in regression tasks.
 
 ```{r}
 library(lightgbm)
@@ -843,7 +981,10 @@ cat("LightGBM MSE: ", lgb_mse, "\n")
 
 ```
 
-####Decision Tree Model
+#### Decision Tree Model
+
+The Decision Tree model is a simple yet powerful algorithm that splits the data into branches based on feature values, forming a tree-like structure. It makes predictions by learning decision rules inferred from the input features. In this project, the Decision Tree model was used to predict monthly rental prices based on property characteristics. While easy to interpret and visualize, decision trees can be prone to overfitting, especially on noisy datasets. However, they provide a useful baseline and can reveal important decision paths in the data.
+
 ```{r}
 
 #Train Decision Tree model
@@ -871,7 +1012,10 @@ cat("Decision Tree MSE: ", dt_mse, "\n")
 
 ```
 
-####Random Forest Model
+#### Random Forest Model
+
+Random Forest is an ensemble learning method that builds multiple decision trees and combines their outputs to improve predictive accuracy and reduce overfitting. Each tree is trained on a random subset of the data and features, which increases model robustness and generalization. In this project, Random Forest was used to predict monthly rental prices by leveraging property features. It is well-suited for handling complex, non-linear relationships and provides good performance even with noisy or unbalanced data. Additionally, it offers feature importance insights, which help in understanding the influence of different variables on rental pricing.
+
 ```{r}
 
 #Train Random Forest model
@@ -899,7 +1043,10 @@ cat("Random Forest MSE: ", rf_mse, "\n")
 
 ```
 
-####Neural Network Model
+#### Neural Network Model
+
+Neural Networks are inspired by the structure of the human brain and are capable of modeling complex, non-linear relationships between inputs and outputs. In this project, a Neural Network was trained to predict monthly rental prices using property-related features. The model consists of interconnected layers of nodes (neurons) that learn feature representations through weighted connections. Neural Networks are particularly powerful for capturing hidden patterns in the data, but they require careful tuning and are less interpretable compared to tree-based models. When properly optimized, they can deliver strong predictive performance in regression tasks.
+
 ```{r}
 
 #Train Neural Network model
@@ -928,7 +1075,10 @@ cat("Neural Network MSE: ", nn_mse, "\n")
 
 ```
 
-####CatBoost Model
+#### CatBoost Model
+
+CatBoost is a high-performance gradient boosting algorithm developed by Yandex, designed to handle categorical features effectively without the need for extensive preprocessing. In this project, CatBoost was used to predict monthly rental prices based on property features. It automatically manages categorical variables, reduces overfitting, and performs well even with relatively small datasets. CatBoost is particularly useful when dealing with mixed data types and delivers strong predictive accuracy while maintaining stability and ease of use.
+
 ```{r}
 
 #Train CatBoost model
@@ -954,15 +1104,33 @@ cat("CatBoost R²: ", catb_r2, "\n")
 cat("CatBoost MAE: ", catb_mae, "\n")
 cat("CatBoost MSE: ", catb_mse, "\n")
 
+
 ```
 
 ### Classification Model (Predict Furnishing Status)
 
-For classification models, algorithms like XGBoost, LightGBM, Logistic Regression, CatBoost, Decision Trees, Random Forest Classifier, Support Vector Machines (SVM), and Neural Network are trained to predict the furnishing status of the property based on property features such as 
+For the classification task, several machine learning algorithms were trained to predict the furnishing status of a property, which includes three categories: fully furnished, partially furnished, and unfurnished. The models applied include Logistic Regression, Decision Tree, Random Forest Classifier, Support Vector Machine (SVM), Neural Network, XGBoost, LightGBM, and CatBoost.
 
-#size, location, number of bedrooms, and rental price.(need to change) +metrics
+These models were trained using key property features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. These features were selected based on their potential influence on furnishing conditions and availability.
 
-####XGBoost Model
+mance was evaluated using standard classification metrics:
+
+-   **Accuracy:** Proportion of total correct predictions.
+
+-   **Precision:** Proportion of correctly predicted positives out of all predicted positives.
+
+-   **Recall:** Proportion of actual positives that were correctly predicted.
+
+-   **F1-Score:** Harmonic mean of precision and recall.
+
+-   **Confusion Matrix:** Detailed breakdown of true vs. predicted classifications for each furnishing category.
+
+These metrics help assess each model's ability to accurately distinguish between furnishing types and support the selection of the most reliable classification approach.
+
+#### XGBoost Model
+
+In this classification task, XGBoost was used to predict the furnishing status of rental properties based on key features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. The model builds a series of decision trees, where each tree attempts to correct the errors of the previous ones. Its robustness and ability to handle complex relationships make it a strong performer in multi-class classification tasks like this one.
+
 ```{r}
 
 #Train XGBoost model
@@ -983,7 +1151,10 @@ print (xgb_class_cm)
 
 ```
 
-####LightGBM Model
+#### LightGBM Model
+
+For this classification task, LightGBM was used to predict the furnishing status of rental properties using inputs such as rental price, property size, property type, property age, proximity to public transport, and available facilities. The model’s leaf-wise tree growth strategy allows it to capture complex patterns in the data while maintaining high performance. Its support for multi-class classification and ability to handle categorical variables effectively make it well-suited for this prediction task.
+
 ```{r}
 
 #Train XGBoost model
@@ -1004,7 +1175,10 @@ print (lgb_class_cm)
 
 ```
 
-####Logistic Regression Model
+#### Logistic Regression Model
+
+In this project, Logistic Regression was applied to predict the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and facilities. While it is a linear model and may not capture complex interactions, it serves as a strong baseline due to its simplicity, interpretability, and efficiency.
+
 ```{r}
 
 #Train XGBoost model
@@ -1026,7 +1200,10 @@ print (log_reg_class_cm)
 
 ```
 
-####CatBoost Model
+#### CatBoost Model
+
+In this classification task, CatBoost was used to predict the furnishing status of rental properties using features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Its ability to automatically process categorical variables and prevent overfitting makes it highly suitable for multi-class classification problems, offering both strong predictive performance and ease of implementation.
+
 ```{r}
 
 #Train CatBoost model
@@ -1047,7 +1224,10 @@ print (catb_class_cm)
 
 ```
 
-####Decision Tree Classifier
+#### Decision Tree Classifier
+
+The Decision Tree Classifier is a simple yet powerful algorithm that makes predictions by learning decision rules from the data and organizing them into a tree-like structure. For this project, it was used to classify the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Decision trees are easy to interpret and visualize, making them useful for understanding how different features influence the furnishing category. However, they can be prone to overfitting, especially on noisy data or datasets with many categories.
+
 ```{r}
 
 #Train Decision Tree Classifier
@@ -1068,7 +1248,10 @@ print (dt_class_cm)
 
 ```
 
-####Random Forest Classifier
+#### Random Forest Classifier
+
+The Random Forest Classifier is an ensemble learning method that builds multiple decision trees and combines their outputs to improve prediction accuracy and generalization. In this project, it was used to predict the furnishing status of rental properties based on key features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. By averaging the results of many diverse trees, the model reduces overfitting and handles both linear and non-linear relationships effectively. It also provides insights into feature importance, helping to understand which variables most influence the furnishing status.
+
 ```{r}
 
 #Train Random Forest Classifier
@@ -1089,7 +1272,10 @@ print (rf_class_cm)
 
 ```
 
-####Support Vector Machines (SVM) Classifier
+#### Support Vector Machines (SVM) Classifier
+
+Support Vector Machines (SVM) is a powerful classification algorithm that works by finding the optimal hyperplane that best separates classes in the feature space. In this project, SVM was used to classify the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. SVM is particularly effective in handling high-dimensional data and can model non-linear decision boundaries using kernel functions. Although it may require careful tuning and is less interpretable than tree-based models, SVM often delivers strong performance in structured classification tasks.
+
 ```{r}
 
 #Train Support Vector Machines (SVM) Classifier
@@ -1110,7 +1296,10 @@ print (svm_class_cm)
 
 ```
 
-####Neural Network Classifier
+#### Neural Network Classifier
+
+The Neural Network Classifier is a flexible and powerful machine learning model inspired by the structure of the human brain. It consists of interconnected layers of nodes (neurons) that learn to detect complex patterns in the data. In this project, a neural network was trained to predict the furnishing status of rental properties using features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Neural networks are capable of modeling non-linear relationships and interactions between variables, making them suitable for multi-class classification tasks. However, they often require more data and computational resources and are generally less interpretable than traditional models.
+
 ```{r}
 
 #Train Neural Network Classifier 
@@ -1128,6 +1317,6 @@ nn_class_prediction <- predict(nn_class_model, X_test_classification)
 
 #Evaluate model performance - Confusion Matrix
 nn_class_cm <- confusionMatrix(nn_class_prediction, y_test_classification)
-print (nn_class_cm)
+print(nn_class_cm)
 
 ```
