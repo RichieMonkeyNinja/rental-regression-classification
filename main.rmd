@@ -21,7 +21,7 @@ Group G03
 
 Richie Teoh (24088171)\
 Elmer Lee (2408236)\
-Micole ()\
+Micole Chung Syn Tung (24073625)\
 Lee Re Xuan ()\
 Angeline Tan Jie Lin ()
 
@@ -48,6 +48,9 @@ library(dplyr)
 library(stringr)
 library(ggplot2)
 library(reshape2)
+library(caret)
+library(xgboost)
+library(lightgbm)
 ```
 
 ```{r}
@@ -406,17 +409,9 @@ summary(hist_data) #Show the summary
 hist_data_below <- hist_data[hist_data < 5000]
 
 hist(
-  hist_data_below, xlab = "Monthly Rent (MYR)", main = "Monthly Rent Distribution (< 5k)",
+  hist_data_below, xlab = "Monthly Accommodation Rent (MYR)", main = "Monthly Accommodation Rent Distribution (< 5k)",
   col = "#A8E4A0", border = "black", breaks = 40
 )
-
-hist_data_above <- hist_data[hist_data > 5000]
-
-hist(
-  hist_data_above, xlab = "Monthly Rent (MYR)", main = "Monthly Rent Distribution (> 5k)",
-  col = "#A8E4A0", border = "black", breaks = 20
-)
-
 
 ```
 ### Histogram of Property Size
@@ -425,7 +420,6 @@ This section shows a histogram of size. It is split into > 3,000 (sq ft) and < 3
 hist_data_size <- (df_EDA$size)
 summary(hist_data_size) #Show the summary
 
-
 hist_data_size_below <- hist_data_size[hist_data_size < 3000]
 
 hist(
@@ -433,15 +427,8 @@ hist(
   col = "#A8E4A0", border = "black", breaks = 30
 )
 
-hist_data_size_above <- hist_data_size[hist_data_size > 3000]
-
-hist(
-  hist_data_size_above, xlab = "Property Size (sq ft)", main = "Monthly Rent Distribution (> 3,000)",
-  col = "#A8E4A0", border = "black", breaks = 60
-)
-
 ```
-### Horizontal Bar Chart
+### Bar Chart
 This section plot horizontal bar graphs to illustrate the frequency/count of each nominal or ordinal data.
 ```{r}
 plot_bar_chart_char <- function(bar_chart_columns) {
@@ -456,89 +443,123 @@ plot_bar_chart_char <- function(bar_chart_columns) {
     
     # Plot horizontal bar chart
     barplot(category_counts,
-            horiz = TRUE,
             col = "skyblue",
-            main = paste(col, "Distribution"),
+            main = paste("Accommodation" , col, "Distribution"),
             xlab = "Count")
   }
 }
 
-bar_chart_columns <- c("parking", "property_type", "rooms", "bathroom", "completion_year", "near_public_transport")
+bar_chart_columns <- c("parking", "rooms", "bathroom", "completion_year")
 plot_bar_chart_char(bar_chart_columns)
 
+```
+### Pie Chart of Property Type
+```{r}
+property_data <- df_EDA %>% count(property_type)
+
+ggplot(property_data, aes(x = "", y = n, fill = property_type)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(n / sum(n) * 100, 1), "%")), position = position_stack(vjust = 0.5)) + 
+  labs(title = "Property Type") +
+  theme(legend.title = element_blank())
+```
+
+### Pie Chart of Near Public Transport
+```{r}
+near_public_transport_data <- df_EDA %>% count(near_public_transport)
+
+near_public_transport_data$near_public_transport[near_public_transport_data$near_public_transport == 0] <- "No"
+near_public_transport_data$near_public_transport[near_public_transport_data$near_public_transport == 1] <- "Yes"
+
+ggplot(near_public_transport_data, aes(x = "", y = n, fill = near_public_transport)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(n / sum(n) * 100, 1), "%")), position = position_stack(vjust = 0.5)) + 
+  labs(title = "Near Public Transport") +
+  theme(legend.title = element_blank())
+```
+
+### Pie Chart of Near Public Transport
+```{r}
+furnished_data <- df_EDA %>% count(furnished)
+
+ggplot(furnished_data, aes(x = "", y = n, fill = furnished)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  geom_text(aes(label = paste0(round(n / sum(n) * 100, 1), "%")), position = position_stack(vjust = 0.5)) + 
+  labs(title = "Property Type") +
+  theme(legend.title = element_blank())
 ```
 
 ## Multivariate Analysis
 
-### Scatter Plot - Two Relationship
+### BoxPlot - Two Relationship
 In this section, we will use a scatter plot to understand the relationship between monthly rent and property size. The scatter plot is filtered based on the upper range to provide a clear visualization.
 ```{r}
-# Filter the data
-Scatter_data_filter <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000, ]
+#Define the bin size 
+breaks <- seq(0, 3000, by = 500)
+rent_size_label <- paste(head(breaks, -1), tail(breaks, -1), sep = "–") #Set the rent_size range ([0],[1])
 
-# Create ggplot scatter plot
-ggplot(Scatter_data_filter, aes(x = monthly_rent, y = size)) +
-  geom_point(color = "#4682B4", alpha = 0.6, size = 2) +
+# Filter the size < 3000 and rent < 5000
+boxplot_data_filter <- df_EDA %>%
+  filter(size < 3000, monthly_rent < 5000) %>%
+  mutate(property_size_bin = cut(size, breaks = breaks, labels = rent_size_label))
+
+# Box plot: Size by Rent Range
+ggplot(boxplot_data_filter, aes(x = property_size_bin, y = monthly_rent)) +
+  geom_boxplot(fill = "#87CEFA", color = "#4682B4", outlier.alpha = 0.3) +
   labs(
-    title = "Monthly Rent vs Property Size (< 3,000 sq ft & < RM5,000)",
-    x = "Monthly Rent (MYR)",
-    y = "Property Size (sq ft)"
+    title = "Property Size Distribution by Monthly Accommodation Rent Range",
+    x = "Property Size (sq ft)",
+    y = "Monthly Rent Range (MYR)"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0.5))
 ```
 
 In this section, we will use a scatter plot to understand the relationship between monthly rent and average popular location distance to KLCC, TRX and Bukit Bintang. The scatter plot is filtered based on the upper range to provide a clear visualization.
 ```{r}
 # Filter the data
-Scatter_data_filter <- df_EDA[df_EDA$Popular_location_distance < 60 & df_EDA$monthly_rent < 5000, ]
+most_frequent_locations <- df_EDA %>%
+  count(location, sort = TRUE) #Find the most frequency location
 
-# Create ggplot scatter plot
-ggplot(Scatter_data_filter, aes(x = monthly_rent, y = Popular_location_distance)) +
-  geom_point(color = "#4682B4", alpha = 0.6, size = 2) +
+#Filter top 20 location and < 5000 money rent
+boxplot_data_filter <- df_EDA %>%
+  filter(monthly_rent < 5000, location %in% most_frequent_locations$location[0:20])
+
+ggplot(boxplot_data_filter, aes(x = reorder(location, monthly_rent, median), y = monthly_rent)) +
+  geom_boxplot(fill = "#87CEFA", color = "#4682B4", outlier.alpha = 0.3) +
   labs(
-    title = "Monthly Rent vs Popular location distance ( <60KM & < RM5,000)",
-    x = "Monthly Rent (MYR)",
-    y = "Popular location distance (KM)"
+    title = "Monthly Accommodation Rent Distribution by Top 20 Locations",
+    x = "Location",
+    y = "Monthly Rent (MYR)"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-### Scatter Plot - Three Relationship
-This section aims to understand the relationship between monthly rent, the average distance of the property location from popular locations, and the size of the property. Through the chart, we can understand whether the monthly rent is affected by distance and property size.
-
-Below is the diagram, if the distance is above 30 km
-
 ```{r}
-filtered_data <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000 & df_EDA$Popular_location_distance > 30, ]
+#Arrange completion year and < 5000 money rent
+boxplot_data_filter <- df_EDA %>%
+  mutate(completion_year = as.integer(completion_year)) %>%
+  filter(monthly_rent < 5000) %>%
+  arrange(completion_year) 
 
-ggplot(filtered_data, aes(x = monthly_rent, y = size)) +
-  geom_point(aes(color = Popular_location_distance, size = Popular_location_distance), alpha = 0.6) +
-  scale_color_gradient(low = "#4682B4", high = "#C68181") +
+#Using factor() arrange into categories type (Grouping)
+boxplot_data_filter$completion_year <- factor(
+  boxplot_data_filter$completion_year
+) 
+
+ggplot(boxplot_data_filter, aes(x = completion_year, y = monthly_rent)) +
+  geom_boxplot(fill = "#87CEFA", color = "#4682B4", outlier.alpha = 0.3) +
   labs(
-    title = "Rent vs Size colored by Distance to Popular Location",
-    x = "Monthly Rent (MYR)",
-    y = "Property Size (sq ft)",
-    color = "Distance (km)",
-    size = "Distance (km)"
+    title = "Monthly Accommodation Rent Distribution by Year",
+    x = "Year",
+    y = "Monthly Rent (MYR)"
   ) +
-  theme_minimal()
-```
-
-Below is the diagram, if the distance is below 30 km
-```{r}
-filtered_data <- df_EDA[df_EDA$size < 3000 & df_EDA$monthly_rent < 5000 & df_EDA$Popular_location_distance < 30, ]
-
-ggplot(filtered_data, aes(x = monthly_rent, y = size)) +
-  geom_point(aes(color = Popular_location_distance, size = Popular_location_distance), alpha = 0.6) +
-  scale_color_gradient(low = "#4682B4", high = "#C68181") +
-  labs(
-    title = "Rent vs Size colored by Distance to Popular Location",
-    x = "Monthly Rent (MYR)",
-    y = "Property Size (sq ft)",
-    color = "Distance (km)",
-    size = "Distance (km)"
-  ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 ## Correlation Matrix
@@ -563,4 +584,550 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
   )
+```
+
+# Data Modelling
+
+As this project is focusing in 2 different targets, predicting rental prices and furnishing status, different models are used for each prediction. 
+
+```{r}
+df_model = data.frame(df) #Make a copy for Data Modelling
+head(df_model)
+```
+
+##Data Standardization & Label encoding
+
+```{r}
+df_model <- df_model %>%
+  mutate(
+    
+#Data Standardization for 'monthly_rent', 'size', and 'Popular_location_distance' columns
+    
+    monthly_rent_standardized = scale (monthly_rent),
+    size_standardized = scale (size),
+    Popular_location_distance_standardized = scale (Popular_location_distance),
+    
+#Label encoding for 'property_type' and 'furnished' columns
+
+    property_type_encoded = as.integer(factor(property_type)),
+    furnished_encoded = as.integer(factor(furnished))
+  )
+
+#Transform the 'completion_year' column to age of the property
+
+current_year <- 2025
+df_model$property_age <- current_year - df_model$completion_year
+
+#One-hot encoding for 'facilities' and 'additional facilities' columns
+
+#Combine both 'facilities' and 'additional facilities' columns
+df_combined_facilities <- df_model %>%
+  mutate(facilities_combined = paste(facilities, additional_facilities, sep = ", "))
+
+#Remove unwanted characters such as 10, 11, 6 in 'facilities' column
+df_combined_facilities$facilities_combined <- gsub("[^a-zA-Z, ]", "", df_combined_facilities$facilities_combined)
+
+#Split each facility into separate rows based on the comma between
+df_facilities <- df_combined_facilities %>%
+  separate_rows(facilities_combined, sep = ", ")  # Split facilities by comma and space
+
+#Replace blank spaces with underscores
+df_facilities <- df_facilities %>%
+  mutate(facilities_combined = gsub(" ", "_", facilities_combined)) %>%  
+  filter(facilities_combined != "")  #Remove empty strings 
+
+#Create binary code for each facility
+df_facilities_encoded <- df_facilities %>%
+  distinct(facilities_combined) %>%  # Make sure each facility appears only once
+  pivot_wider(names_from = facilities_combined, values_from = facilities_combined, 
+              values_fn = length, values_fill = list(facilities_combined = 0))  
+
+#Merge back to the original dataframe
+df_model_encoded <- bind_cols(df_model, df_facilities_encoded)
+
+
+#Filter out unwanted columns
+drop_columns <- c("ads_id","prop_name", "full_location", "location","property_type", "furnished", "facilities", "additional_facilities", "region",  "completion_year","distance_to_TRX", "distance_to_KLCC", "distance_to_BukitBintang", "Popular_location_distance", "size", "monthly_rent")
+
+df_model <- df_model_encoded%>% select(-all_of(drop_columns))
+
+head(df_model)
+
+```
+
+## Data Splitting
+
+Data splitting is performed separately for both targets variables: monthly_rent for the regression model (predicting rental price) and furnished for the classification model (predicting furnishing status). 
+
+The dataset is split into training and testing sets. Training sets are used to build model, while testing sets are used to evaluate the model performance. In this case, we split the data into 80% train set and 20% test set. Separate splits are created for each model according to their respective target variable.
+
+### Regression Model (Predict Rental Price)
+
+```{r}
+#For reproducibility
+set.seed(123) 
+
+#Split in 80/20 for train and test sets
+split = 0.80 
+
+```
+
+Create train and test sets using createDataPartition(). This function helps to split the data in a way that reflects the targeted variables (Monthly_rent) distribution. 
+
+```{r}
+train_index_regression <- createDataPartition(df_model$monthly_rent_standardized, p=split, list=FALSE) 
+
+#Create training and testing datasets
+X_train_regression <- df_model[train_index_regression,]%>% select( -monthly_rent_standardized)
+y_train_regression <- df_model$monthly_rent_standardized[train_index_regression]
+
+X_test_regression <- df_model[-train_index_regression,]%>% select(-monthly_rent_standardized)
+y_test_regression <- df_model$monthly_rent_standardized[-train_index_regression]
+
+# Print the shape of X_train_regression and y_train_regression
+cat("X_train_regression shape:", dim(X_train_regression), "y_train_regression shape:", length(y_train_regression), "\n")
+
+# Print the shape of X_test_regression and y_test_regression
+cat("X_test_regression shape:", dim(X_test_regression), "y_test_regression shape:", length(y_test_regression))
+```
+
+### Classification Model (Predict Furnishing Status)
+
+```{r}
+#For reproducibility
+set.seed(123) 
+
+#Split in 80/20 for train and test sets
+split = 0.80 
+
+#Create train and test sets using createDataPartition
+train_index_classification <- createDataPartition(df_model$furnished_encoded, p=split, list=FALSE) 
+
+X_train_classification <- df_model[train_index_classification,]%>% select( -furnished_encoded)
+y_train_classification <- df_model$furnished_encoded[train_index_classification]
+
+X_test_classification <- df_model[-train_index_classification,]%>% select( -furnished_encoded)
+y_test_classification <- df_model$furnished_encoded[-train_index_classification]
+
+# Print the shape of X_train_classification and y_train_classification for 
+cat("X_train_classification shape:", dim(X_train_classification), "y_train_classification shape:", length(y_train_classification), "\n")
+
+# Print the shape of X_test_classification and y_test_classification
+cat("X_test_classification shape:", dim(X_test_classification), "y_test_classification shape:", length(y_test_classification))
+```
+
+## Model Training
+
+In this section, the respective training sets are used to build regression and classification models with different algorithms. 
+
+```{r}
+#Cross-validation 
+train_ctrl <- trainControl(
+  method = "cv",
+  number = 5, 
+  verboseIter   = TRUE, #Provide detailed, real-time feedback on training process
+  savePredictions = "final" #To save out-of-sample predictions from the final model
+)
+
+#For Regression metrics
+regression_metrics <- c("MAE", "MSE", "RMSE", "R²")
+
+#For Classification metrics
+classification_metrics <- c("Accuracy", "Precision", "Recall", "F1-score", "AUC-ROC", "Kappa")
+
+```
+
+### Regression Model (Predict Rental Price)
+
+For Regression models, algorithms like Linear Regression, XGBoost, LightGBM,  Decision Tree, Random Forest, Neural Networks, and CatBoost are trained to predict the rental price based on key property features such as 
+
+# size, location, number of rooms, and furnishing status.(nned to change)+metrics
+
+#### Linear Regression Model
+
+```{r}
+
+#Train Linear Regression model
+lm_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "lm", 
+  trControl = train_ctrl,
+  metric = "RMSE" #train() can only accept one metric at a time
+)
+
+#Prediction
+lm_prediction <- predict(lm_model, X_test_regression)
+
+#Evaluate model performance
+lm_rmse <- RMSE(lm_prediction, y_test_regression)
+lm_r2 <- R2(lm_prediction, y_test_regression)
+lm_mae <- MAE(lm_prediction, y_test_regression)
+lm_mse <- (lm_rmse)^2
+
+
+cat("Linear Regression RMSE: ", lm_rmse, "\n")
+cat("Linear Regression R²: ", lm_r2, "\n")
+cat("Linear Regression MAE: ", lm_mae, "\n")
+cat("Linear Regression MSE: ", lm_mse, "\n")
+
+```
+####XGBoost Model
+
+```{r}
+
+#Train XGBoost model
+xgb_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "xgbTree", 
+  trControl = train_ctrl,
+  metric = "RMSE" #train() can only accept one metric at a time
+)
+
+#Prediction
+xgb_prediction <- predict(xgb_model, X_test_regression)
+
+#Evaluate model performance
+xgb_rmse <- RMSE(xgb_prediction, y_test_regression)
+xgb_r2 <- R2(xgb_prediction, y_test_regression)
+xgb_mae <- MAE(xgb_prediction, y_test_regression)
+xgb_mse <- (xgb_rmse)^2
+
+cat("XGBoost RMSE: ", xgb_rmse, "\n")
+cat("XGBoost R²: ", xgb_r2, "\n")
+cat("XGBoost MAE: ", xgb_mae, "\n")
+cat("XGBoost MSE: ", xgb_mse, "\n")
+
+```
+
+####LightGBM Model
+
+```{r}
+library(lightgbm)
+
+# (LightGBM is not supported in caret)
+#Convert to matrix format (as LightGBM supports)
+lgb_train_data <- lgb.Dataset(data = as.matrix(X_train_regression), label = y_train_regression)
+
+#Training contrl for LightGBM model
+lgb_train_ctrl <- list(
+  objective = "regression",  
+  metric = "rmse",            #RMSE metric
+  num_leaves = 31,            #Number of leaves in each tree
+  learning_rate = 0.05,       #Learning rate
+  nrounds = 100               #Number of boosting rounds
+
+)
+
+#Train LightGBM model 
+lgb_model <- lgb.train(
+  params = lgb_train_ctrl,
+  data = lgb_train_data,
+  nrounds = lgb_train_ctrl$nrounds
+)
+  
+#Prediction
+lgb_prediction <- predict(lgb_model, as.matrix (X_test_regression))
+
+#Evaluate model performance
+lgb_rmse <- RMSE(lgb_prediction, y_test_regression)
+lgb_r2 <- R2(lgb_prediction, y_test_regression)
+lgb_mae <- MAE(lgb_prediction, y_test_regression)
+lgb_mse <- (lgb_rmse)^2
+
+cat("LightGBM RMSE: ", lgb_rmse, "\n")
+cat("LightGBM R²: ", lgb_r2, "\n")
+cat("LightGBM MAE: ", lgb_mae, "\n")
+cat("LightGBM MSE: ", lgb_mse, "\n")
+
+```
+
+####Decision Tree Model
+```{r}
+
+#Train Decision Tree model
+dt_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "rpart", 
+  trControl = train_ctrl,
+  metric = "RMSE" #train() can only accept one metric at a time
+)
+
+#Prediction
+dt_prediction <- predict(dt_model, X_test_regression)
+
+#Evaluate model performance
+dt_rmse <- RMSE(dt_prediction, y_test_regression)
+dt_r2 <- R2(dt_prediction, y_test_regression)
+dt_mae <- MAE(dt_prediction, y_test_regression)
+dt_mse <- (dt_rmse)^2
+
+cat("Decision Tree RMSE: ", dt_rmse, "\n")
+cat("Decision Tree R²: ", dt_r2, "\n")
+cat("Decision Tree MAE: ", dt_mae, "\n")
+cat("Decision Tree MSE: ", dt_mse, "\n")
+
+```
+
+####Random Forest Model
+```{r}
+
+#Train Random Forest model
+rf_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "rf", 
+  trControl = train_ctrl,
+  metric = "RMSE" #train() can only accept one metric at a time
+)
+
+#Prediction
+rf_prediction <- predict(rf_model, X_test_regression)
+
+#Evaluate model performance
+rf_rmse <- RMSE(rf_prediction, y_test_regression)
+rf_r2 <- R2(rf_prediction, y_test_regression)
+rf_mae <- MAE(rf_prediction, y_test_regression)
+rf_mse <- (rf_rmse)^2
+
+cat("Random Forest RMSE: ", rd_rmse, "\n")
+cat("Random Forest R²: ", rf_r2, "\n")
+cat("Random Forest MAE: ", rf_mae, "\n")
+cat("Random Forest MSE: ", rf_mse, "\n")
+
+```
+
+####Neural Network Model
+```{r}
+
+#Train Neural Network model
+nn_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "nnet", 
+  trControl = train_ctrl,
+  metric = "RMSE", #train() can only accept one metric at a time
+  trace = FALSE #To suppress the training output
+)
+
+#Prediction
+nn_prediction <- predict(nn_model, X_test_regression)
+
+#Evaluate model performance
+nn_rmse <- RMSE(nn_prediction, y_test_regression)
+nn_r2 <- R2(nn_prediction, y_test_regression)
+nn_mae <- MAE(nn_prediction, y_test_regression)
+nn_mse <- (nn_rmse)^2
+
+cat("Neural Network RMSE: ", nn_rmse, "\n")
+cat("Neural Network R²: ", nn_r2, "\n")
+cat("Neural Network MAE: ", nn_mae, "\n")
+cat("Neural Network MSE: ", nn_mse, "\n")
+
+```
+
+####CatBoost Model
+```{r}
+
+#Train CatBoost model
+catb_model <- train (
+  x = X_train_regression, 
+  y = y_train_regression, 
+  method = "catboost", 
+  trControl = train_ctrl,
+  metric = "RMSE" #train() can only accept one metric at a time
+)
+
+#Prediction
+catb_prediction <- predict(catb_model, X_test_regression)
+
+#Evaluate model performance
+catb_rmse <- RMSE(catb_prediction, y_test_regression)
+catb_r2 <- R2(catb_prediction, y_test_regression)
+catb_mae <- MAE(catb_prediction, y_test_regression)
+catb_mse <- (catb_rmse)^2
+
+cat("CatBoost RMSE: ", catb_rmse, "\n")
+cat("CatBoost R²: ", catb_r2, "\n")
+cat("CatBoost MAE: ", catb_mae, "\n")
+cat("CatBoost MSE: ", catb_mse, "\n")
+
+```
+
+### Classification Model (Predict Furnishing Status)
+
+For classification models, algorithms like XGBoost, LightGBM, Logistic Regression, CatBoost, Decision Trees, Random Forest Classifier, Support Vector Machines (SVM), and Neural Network are trained to predict the furnishing status of the property based on property features such as 
+
+#size, location, number of bedrooms, and rental price.(need to change) +metrics
+
+####XGBoost Model
+```{r}
+
+#Train XGBoost model
+xgb_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "xgbTree", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+xgb_class_prediction <- predict(xgb_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+xgb_class_cm <- confusionMatrix(xgb_class_prediction, y_test_classification)
+print (xgb_class_cm)
+
+```
+
+####LightGBM Model
+```{r}
+
+#Train XGBoost model
+lgb_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "lightgbm", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+lgb_class_prediction <- predict(lgb_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+lgb_class_cm <- confusionMatrix(lgb_class_prediction, y_test_classification)
+print (lgb_class_cm)
+
+```
+
+####Logistic Regression Model
+```{r}
+
+#Train XGBoost model
+log_reg_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "glm", 
+  family = "binomial", #To tell the model that the target variable is binary
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+log_reg_class_prediction <- predict(log_reg_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+log_reg_class_cm <- confusionMatrix(log_reg_class_prediction, y_test_classification)
+print (log_reg_class_cm)
+
+```
+
+####CatBoost Model
+```{r}
+
+#Train CatBoost model
+catb_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "catboost", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+catb_class_prediction <- predict(catb_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+catb_class_cm <- confusionMatrix(catb_class_prediction, y_test_classification)
+print (catb_class_cm)
+
+```
+
+####Decision Tree Classifier
+```{r}
+
+#Train Decision Tree Classifier
+dt_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "rpart", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+dt_class_prediction <- predict(dt_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+dt_class_cm <- confusionMatrix(dt_class_prediction, y_test_classification)
+print (dt_class_cm)
+
+```
+
+####Random Forest Classifier
+```{r}
+
+#Train Random Forest Classifier
+rf_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "rf", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+rf_class_prediction <- predict(rf_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+rf_class_cm <- confusionMatrix(rf_class_prediction, y_test_classification)
+print (rf_class_cm)
+
+```
+
+####Support Vector Machines (SVM) Classifier
+```{r}
+
+#Train Support Vector Machines (SVM) Classifier
+svm_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "svmRadial", 
+  trControl = train_ctrl,
+  metric = "Accuracy" #train() can only accept one metric at a time
+)
+
+#Prediction
+svm_class_prediction <- predict(svm_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+svm_class_cm <- confusionMatrix(svm_class_prediction, y_test_classification)
+print (svm_class_cm)
+
+```
+
+####Neural Network Classifier
+```{r}
+
+#Train Neural Network Classifier 
+nn_class_model <- train (
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "nnet", 
+  trControl = train_ctrl,
+  metric = "Accuracy", #train() can only accept one metric at a time
+  trace = FALSE #To suppress the training output
+)
+
+#Prediction
+nn_class_prediction <- predict(nn_class_model, X_test_classification)
+
+#Evaluate model performance - Confusion Matrix
+nn_class_cm <- confusionMatrix(nn_class_prediction, y_test_classification)
+print (nn_class_cm)
+
 ```
