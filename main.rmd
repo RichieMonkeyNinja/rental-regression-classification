@@ -830,6 +830,10 @@ y_train_classification <- df_model$furnished_encoded[train_index_classification]
 X_test_classification <- df_model[-train_index_classification,]%>% select( -furnished_encoded)
 y_test_classification <- df_model$furnished_encoded[-train_index_classification]
 
+# ✅ Convert target variables to factor (important for classification!)
+y_train_classification <- as.factor(y_train_classification)
+y_test_classification <- as.factor(y_test_classification)
+
 # Print the shape of X_train_classification and y_train_classification for 
 cat("X_train_classification shape:", dim(X_train_classification), "y_train_classification shape:", length(y_train_classification), "\n")
 
