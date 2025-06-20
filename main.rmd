@@ -20,7 +20,7 @@ body {
 WQD7004 Group Project - OCC1 - Group G03
 
 Richie Teoh (24088171)\
-Elmer Lee Jia Zhao (2408236)\
+Elmer Lee Jia Zhao (24082366)\
 Micole Chung Syn Tung (24073625)\
 Lee Re Xuan (24071969)\
 Angeline Tan Jie Lin (24084444)
@@ -78,6 +78,7 @@ library(reshape2)
 library(caret)
 library(xgboost)
 library(lightgbm)
+library(nnet)
 ```
 
 ```{r}
@@ -700,79 +701,136 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
     plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
   )
 ```
+# Feature Engineering
+```{r}
+df_feature = data.frame(df_EDA) #Make a copy for Data Modelling
+head(df_feature)
+```
+
+
+```{r}
+
+df_feature <- df_feature %>% filter(monthly_rent > 400 & monthly_rent < 5000)
+df_feature <- df_feature %>% filter(size > 100 & size < 3000)
+df_feature <- df_feature %>% filter(rooms > 0 & rooms < 6)
+df_feature <- df_feature %>% filter(parking > 0 & parking < 4)
+df_feature <- df_feature %>% filter(bathroom > 0 & bathroom < 4)
+
+head(df_feature)
+```
+
+
+```{r}
+heatmap_data <- df_feature %>%
+  select(where(is.numeric)) #Select only numeric data (remove such as prop_name, e.g.)
+
+corr_data <- cor(heatmap_data, use = "complete.obs") #Transfer into numeric (-1 , 1)
+melted_corr <- melt(corr_data) #into a format for ggplot
+heap_map_color <- colorRampPalette(c("skyblue", "white", "#cc474b"))(200)
+
+# Plot
+ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(value,2)), size = 3) +
+  scale_fill_gradientn(colors = heap_map_color, limits = c(-1, 1)) +
+  labs(title = "Correlation Matrix", x = NULL, y = NULL) + #Add NULL else will have Var2 and Var1
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
+  )
+```
+
+
+
+```{r}
+# Make a copy (assuming df_feature exists)
+df_feature_prepare = data.frame(df_feature)
+
+# 2. Clean the 'furnished' column: trim whitespace and standardize case (optional, but good practice)
+df_feature_prepare$furnished <- trimws(df_feature_prepare$furnished) # Remove leading/trailing spaces
+# df_feature_prepare$furnished <- tolower(df_feature_prepare$furnished) # Convert to lowercase if needed
+
+# Recode 'furnished' column
+df_feature_prepare$furnished <- df_feature_prepare$furnished %>%
+  recode(
+    "Fully Furnished" = 1,
+    "Partially Furnished" = 2,
+    "Not Furnished" = 3,
+    .default = NA_real_ # Explicitly handle anything unmatched
+  ) %>%
+  as.numeric()
+
+# Check unique values after recoding
+print("Unique values in 'furnished' after recoding:")
+print(unique(df_feature_prepare$furnished))
+
+
+# --- Diagnosing and Cleaning 'property_type' column ---
+# 1. Check unique values before recoding
+print("Unique values in 'property_type' before recoding:")
+print(unique(df_feature_prepare$property_type))
+
+# 2. Clean the 'property_type' column: trim whitespace and standardize case (if applicable)
+df_feature_prepare$property_type <- trimws(df_feature_prepare$property_type) # Remove leading/trailing spaces
+# df_feature_prepare$property_type <- tolower(df_feature_prepare$property_type) # Convert to lowercase if needed
+
+# Recode 'property_type'
+df_feature_prepare$property_type <- df_feature_prepare$property_type %>%
+  recode(
+    "Condominium" = 1,
+    "Service Residence" = 0,
+    .default = NA_real_ # Essential to catch unmatched values
+  ) %>%
+  as.numeric()
+
+# Check unique values after recoding
+print("Unique values in 'property_type' after recoding:")
+print(unique(df_feature_prepare$property_type))
+
+
+# Transform the 'completion_year' column to age of the property
+current_year <- 2025
+df_feature_prepare$property_age <- current_year - df_feature_prepare$completion_year
+
+
+# Combine both 'facilities' and 'additional facilities' columns
+# Ensure both columns are character type before pasting to avoid issues with factors
+df_feature_prepare$facilities <- as.character(df_feature_prepare$facilities)
+df_feature_prepare$additional_facilities <- as.character(df_feature_prepare$additional_facilities)
+
+df_combined_facilities <- df_feature_prepare %>%
+  mutate(facilities_combined = paste(facilities, additional_facilities, sep = ", "))
+
+# Remove unwanted characters such as 10, 11, 6 in 'facilities' column
+# Make sure to work on the df_combined_facilities object
+df_combined_facilities$facilities_combined <- gsub("[^a-zA-Z, ]", "", df_combined_facilities$facilities_combined)
+
+# Count the number of facilities from 'facilities_combined'
+df_facilities <- df_combined_facilities %>%
+  mutate(number_facilities = sapply(strsplit(facilities_combined, ", "), length))
+
+
+# --- Final Filtering and Selection ---
+keep_columns <- c("rooms", "parking", "bathroom", "near_public_transport",
+                  "monthly_rent", "size",
+                  "Popular_location_distance", "property_type",
+                  "furnished", "property_age", "number_facilities", "location")
+
+# Filter out unwanted columns from the last dataframe where you performed transformations
+df_final_prepared <- df_facilities %>% select(any_of(keep_columns))
+
+df_final_prepared$location <- factor(df_final_prepared$location)
+
+head(df_final_prepared)
+```
 
 # Data Modelling
 
 This project involves two separate predictive tasks: estimating rental prices (a regression problem) and classifying furnishing status (a multi-class classification problem). Accordingly, different models are applied for each task to optimize performance. Regression models are used to predict continuous rental prices based on property features, while classification models are trained to categorize listings into furnishing types—fully furnished, partially furnished, or unfurnished. Each model is evaluated using appropriate performance metrics aligned with its predictive objective.
 
 ```{r}
-df_model = data.frame(df) #Make a copy for Data Modelling
+df_model = data.frame(df_final_prepared) #Make a copy for Data Modelling
 head(df_model)
-```
-
-## Data Standardization & Label encoding
-
-To prepare the data for modeling, numerical features such as rental price and property size were standardized to ensure consistent scale, improving model performance. Categorical variables like property type and furnishing status were encoded into numeric formats using label encoding, enabling them to be used effectively in machine learning algorithms. These preprocessing steps help ensure the dataset is clean, structured, and model-ready.
-
-```{r}
-df_model <- df_model %>%
-  mutate(
-    
-#Data Standardization for 'monthly_rent', 'size', and 'Popular_location_distance' columns
-    
-    monthly_rent_standardized = scale (monthly_rent),
-    size_standardized = scale (size),
-    Popular_location_distance_standardized = scale (Popular_location_distance),
-    
-#Label encoding for 'property_type' and 'furnished' columns
-
-    property_type_encoded = as.integer(factor(property_type)),
-    furnished_encoded = as.integer(factor(furnished))
-  )
-
-#Encode 2 to 0 for property_type
-
-df_model$property_type_encoded[df_model$property_type_encoded==2] = 0
-
-#Transform the 'completion_year' column to age of the property
-
-current_year <- 2025
-df_model$property_age <- current_year - df_model$completion_year
-
-#One-hot encoding for 'facilities' and 'additional facilities' columns
-
-#Combine both 'facilities' and 'additional facilities' columns
-df_combined_facilities <- df_model %>%
-  mutate(facilities_combined = paste(facilities, additional_facilities, sep = ", "))
-
-#Remove unwanted characters such as 10, 11, 6 in 'facilities' column
-df_combined_facilities$facilities_combined <- gsub("[^a-zA-Z, ]", "", df_combined_facilities$facilities_combined)
-
-#Split each facility into separate rows based on the comma between
-df_facilities <- df_combined_facilities %>%
-  separate_rows(facilities_combined, sep = ", ")  # Split facilities by comma and space
-
-#Replace blank spaces with underscores
-df_facilities <- df_facilities %>%
-  mutate(facilities_combined = gsub(" ", "_", facilities_combined)) %>%  
-  filter(facilities_combined != "")  #Remove empty strings 
-
-#Create binary code for each facility
-df_facilities_encoded <- df_facilities %>%
-  distinct(facilities_combined) %>%  # Make sure each facility appears only once
-  pivot_wider(names_from = facilities_combined, values_from = facilities_combined, 
-              values_fn = length, values_fill = list(facilities_combined = 0))  
-
-#Merge back to the original dataframe
-df_model_encoded <- bind_cols(df_model, df_facilities_encoded)
-
-#Filter out unwanted columns
-drop_columns <- c("ads_id","prop_name", "full_location", "location","property_type", "furnished", "facilities", "additional_facilities", "region",  "completion_year","distance_to_TRX", "distance_to_KLCC", "distance_to_BukitBintang", "Popular_location_distance", "size", "monthly_rent")
-
-df_model <- df_model_encoded%>% select(-all_of(drop_columns))
-
-head(df_model)
-
 ```
 
 ## Data Splitting
@@ -791,20 +849,19 @@ set.seed(123)
 
 #Split in 80/20 for train and test sets
 split = 0.80 
-
 ```
 
 Training and testing sets were created using the `createDataPartition()` function from the **caret** package. This method ensures that the split maintains the distribution of the target variable, `monthly_rent`, allowing for a representative and balanced partition between the training and testing datasets.
 
 ```{r}
-train_index_regression <- createDataPartition(df_model$monthly_rent_standardized, p=split, list=FALSE) 
+train_index_regression <- createDataPartition(df_model$monthly_rent, p=split, list=FALSE) 
 
 #Create training and testing datasets
-X_train_regression <- df_model[train_index_regression,]%>% select( -monthly_rent_standardized)
-y_train_regression <- df_model$monthly_rent_standardized[train_index_regression]
+X_train_regression <- df_model[train_index_regression,]%>% select( -monthly_rent)
+X_test_regression <- df_model[-train_index_regression,]%>% select(-monthly_rent)
 
-X_test_regression <- df_model[-train_index_regression,]%>% select(-monthly_rent_standardized)
-y_test_regression <- df_model$monthly_rent_standardized[-train_index_regression]
+y_train_regression <- df_model$monthly_rent[train_index_regression]
+y_test_regression <- df_model$monthly_rent[-train_index_regression]
 
 # Print the shape of X_train_regression and y_train_regression
 cat("X_train_regression shape:", dim(X_train_regression), "y_train_regression shape:", length(y_train_regression), "\n")
@@ -812,7 +869,6 @@ cat("X_train_regression shape:", dim(X_train_regression), "y_train_regression sh
 # Print the shape of X_test_regression and y_test_regression
 cat("X_test_regression shape:", dim(X_test_regression), "y_test_regression shape:", length(y_test_regression))
 ```
-
 ### Classification Model (Predict Furnishing Status)
 
 For the classification task, the target variable is `furnished`, which includes three categories: fully furnished, partially furnished, and unfurnished. The goal is to predict the furnishing status of a rental unit based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Various classification algorithms were applied, and model performance was evaluated using metrics such as Accuracy, Precision, Recall, F1-Score, and the Confusion Matrix to assess how well each model distinguishes between furnishing categories.
@@ -825,15 +881,15 @@ set.seed(123)
 split = 0.80 
 
 #Create train and test sets using createDataPartition
-train_index_classification <- createDataPartition(df_model$furnished_encoded, p=split, list=FALSE) 
+train_index_classification <- createDataPartition(df_model$furnished, p=split, list=FALSE) 
 
-X_train_classification <- df_model[train_index_classification,]%>% select( -furnished_encoded)
-y_train_classification <- df_model$furnished_encoded[train_index_classification]
+X_train_classification <- df_model[train_index_classification,]%>% select( -furnished)
+X_test_classification <- df_model[-train_index_classification,]%>% select( -furnished)
 
-X_test_classification <- df_model[-train_index_classification,]%>% select( -furnished_encoded)
-y_test_classification <- df_model$furnished_encoded[-train_index_classification]
+y_train_classification <- df_model$furnished[train_index_classification]
+y_test_classification <- df_model$furnished[-train_index_classification]
 
-# ✅ Convert target variables to factor (important for classification!)
+#Convert target variables to factor (important for classification!)
 y_train_classification <- as.factor(y_train_classification)
 y_test_classification <- as.factor(y_test_classification)
 
@@ -843,6 +899,109 @@ cat("X_train_classification shape:", dim(X_train_classification), "y_train_class
 # Print the shape of X_test_classification and y_test_classification
 cat("X_test_classification shape:", dim(X_test_classification), "y_test_classification shape:", length(y_test_classification))
 ```
+
+## Data Standardization
+
+To prepare the data for modeling, numerical features such as rental price and property size were standardized to ensure consistent scale, improving model performance. Categorical variables like property type and furnishing status were encoded into numeric formats using label encoding, enabling them to be used effectively in machine learning algorithms. These preprocessing steps help ensure the dataset is clean, structured, and model-ready.
+
+```{r}
+library(caret) # For createDataPartition
+library(dplyr) # For %>% and select
+
+# Assuming df_model is your complete dataset (df_feature_prepare after initial feature engineering)
+# And 'split' variable is defined (e.g., split = 0.8)
+
+# --- 1. Initial Data Splitting ---
+train_index_regression <- createDataPartition(df_model$monthly_rent, p = split, list = FALSE)
+
+# Create copies for modification, select out target variable
+X_train_regression <- df_model[train_index_regression, ] %>% select(-monthly_rent)
+X_test_regression <- df_model[-train_index_regression, ] %>% select(-monthly_rent)
+
+y_train_regression <- df_model$monthly_rent[train_index_regression]
+y_test_regression <- df_model$monthly_rent[-train_index_regression]
+
+# --- 2. Standardize 'monthly_rent' (Target Variable y) ---
+mean_y_train <- mean(y_train_regression)
+sd_y_train <- sd(y_train_regression)
+
+y_train_regression_scaled <- (y_train_regression - mean_y_train) / sd_y_train
+y_test_regression_scaled <- (y_test_regression - mean_y_train) / sd_y_train
+
+# --- 3. Standardize Numeric Features in X ('size', 'Popular_location_distance') ---
+
+# Calculate mean and standard deviation from training X
+mean_size_train <- mean(X_train_regression$size)
+sd_size_train <- sd(X_train_regression$size)
+
+mean_popular_location_distance_train <- mean(X_train_regression$Popular_location_distance)
+sd_popular_location_distance_train <- sd(X_train_regression$Popular_location_distance)
+
+# Apply standardization to both training and test X
+X_train_regression$size_scaled <- (X_train_regression$size - mean_size_train) / sd_size_train
+X_test_regression$size_scaled <- (X_test_regression$size - mean_size_train) / sd_size_train
+
+X_train_regression$popular_location_distance_scaled <- (X_train_regression$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
+X_test_regression$popular_location_distance_scaled <- (X_test_regression$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
+
+X_train_classification$popular_location_distance_scaled <- (X_train_classification$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
+X_test_classification$popular_location_distance_scaled <- (X_test_classification$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
+
+
+# --- 4. Encode 'location' (Label Encoding) ---
+# Ensure 'location' is a factor in your original df_model for consistent level ordering
+# Or convert it here for train/test sets explicitly
+X_train_regression$location <- as.factor(X_train_regression$location)
+X_test_regression$location <- as.factor(X_test_regression$location)
+
+X_train_classification$location <- as.factor(X_train_classification$location)
+X_test_classification$location <- as.factor(X_test_classification$location)
+
+
+
+# Get all unique levels from the *training* data to ensure consistent encoding
+# This is crucial! Only train set levels define the mapping.
+all_location_levels <- levels(X_train_regression$location)
+
+# Convert to factor with consistent levels, then to numeric
+X_train_regression$location_encoded <- as.numeric(factor(X_train_regression$location, levels = all_location_levels))
+X_test_regression$location_encoded <- as.numeric(factor(X_test_regression$location, levels = all_location_levels))
+
+X_train_classification$location_encoded <- as.numeric(factor(X_train_classification$location, levels = all_location_levels))
+X_test_classification$location_encoded <- as.numeric(factor(X_test_classification$location, levels = all_location_levels))
+
+# Handle potential NAs in test set if new locations appear
+# Decide on a default value:
+# - NA_integer_ (if your model can handle NAs, e.g., some tree-based models)
+# - 0 (if 0 is not used by any existing category and makes sense as a "default/unseen" category)
+# - The mean/median of other encoded locations (less common for label encoding)
+# Let's use 0 as a common placeholder for unseen categories in label encoding.
+default_location_value <- 0
+X_test_regression$location_encoded[is.na(X_test_regression$location_encoded)] <- default_location_value
+X_test_classification$location_encoded[is.na(X_test_classification$location_encoded)] <- default_location_value
+
+
+# --- 5. Remove Original (Unscaled/Unencoded) Columns ---
+X_train_regression <- X_train_regression %>%
+  select(-size, -Popular_location_distance, -location) # Use comma for multiple columns to remove
+
+X_test_regression <- X_test_regression %>%
+  select(-size, -Popular_location_distance, -location)
+
+X_train_classification <- X_train_classification %>%
+  select(-size, -Popular_location_distance, -location) # Use comma for multiple columns to remove
+
+X_test_classification <- X_test_classification %>%
+  select(-size, -Popular_location_distance, -location)
+
+
+# --- 7. Inspect a few rows ---
+print("Head of X_train_regression (after all transformations):")
+head(X_train_regression)
+print("Head of X_test_regression (after all transformations):")
+head(X_test_regression)
+```
+
 
 ## Model Training
 
@@ -862,7 +1021,6 @@ regression_metrics <- c("MAE", "MSE", "RMSE", "R²")
 
 #For Classification metrics
 classification_metrics <- c("Accuracy", "Precision", "Recall", "F1-score", "AUC-ROC", "Kappa")
-
 ```
 
 ### Regression Model (Predict Rental Price)
@@ -911,6 +1069,46 @@ cat("Linear Regression R²: ", lm_r2, "\n")
 cat("Linear Regression MAE: ", lm_mae, "\n")
 cat("Linear Regression MSE: ", lm_mse, "\n")
 
+```
+```{r}
+# Assuming lm_model has been trained as in your code snippet
+
+# 1. Access the model's coefficients
+# For an "lm" method in train, the actual linear model object is stored within lm_model$finalModel
+coefficients <- coef(lm_model$finalModel)
+
+# Convert to a data frame for easier manipulation
+coefficients_df <- as.data.frame(coefficients)
+colnames(coefficients_df) <- "Coefficient"
+
+# Remove the intercept term, as it's not a feature importance
+coefficients_df <- coefficients_df[-1, , drop = FALSE] # remove the (Intercept) row
+
+# Calculate absolute coefficients for importance ranking
+coefficients_df$Abs_Coefficient <- abs(coefficients_df$Coefficient)
+
+# Order by absolute coefficient value (descending)
+feature_importance <- coefficients_df[order(coefficients_df$Abs_Coefficient, decreasing = TRUE), ]
+
+# Print the top N most important features
+print("Feature Importance (Linear Regression - based on absolute coefficients):")
+print(head(feature_importance, 10)) # Adjust 10 to see more or fewer top features
+
+# Optional: Visualize feature importance (using ggplot2)
+library(ggplot2)
+
+# Prepare data for plotting (top N features)
+top_n <- 15 # Adjust as needed
+plot_data <- head(feature_importance, top_n)
+plot_data$Feature <- rownames(plot_data)
+
+ggplot(plot_data, aes(x = reorder(Feature, Abs_Coefficient), y = Abs_Coefficient)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() + # Makes the labels readable
+  labs(title = paste0("Top ", top_n, " Feature Importance (Linear Regression)"),
+       x = "Feature",
+       y = "Absolute Coefficient Value") +
+  theme_minimal()
 ```
 
 #### XGBoost Model
@@ -1019,6 +1217,7 @@ cat("Decision Tree MSE: ", dt_mse, "\n")
 
 ```
 
+
 #### Neural Network Model
 
 Neural Networks are inspired by the structure of the human brain and are capable of modeling complex, non-linear relationships between inputs and outputs. In this project, a Neural Network was trained to predict monthly rental prices using property-related features. The model consists of interconnected layers of nodes (neurons) that learn feature representations through weighted connections. Neural Networks are particularly powerful for capturing hidden patterns in the data, but they require careful tuning and are less interpretable compared to tree-based models. When properly optimized, they can deliver strong predictive performance in regression tasks.
@@ -1101,43 +1300,27 @@ print (xgb_class_cm)
 For this classification task, LightGBM was used to predict the furnishing status of rental properties using inputs such as rental price, property size, property type, property age, proximity to public transport, and available facilities. The model’s leaf-wise tree growth strategy allows it to capture complex patterns in the data while maintaining high performance. Its support for multi-class classification and ability to handle categorical variables effectively make it well-suited for this prediction task.
 
 ```{r}
-
-# Ensure lightgbm is loaded
+# Install and load required packages if not already done
+# install.packages("lightgbm")
+# install.packages("caret")
 library(lightgbm)
-
-# Convert features to matrix and labels to numeric (LightGBM needs labels starting from 0)
-lgb_train_data <- lgb.Dataset(data = as.matrix(X_train_classification), 
-                              label = as.numeric(y_train_classification) - 1)
-
-# Set LightGBM parameters
-params <- list(
-  objective = "multiclass",
-  metric = "multi_logloss",
-  num_class = length(unique(y_train_classification)),
-  learning_rate = 0.05,
-  num_leaves = 31
-)
+library(caret)
 
 # Train LightGBM model
-lgb_model <- lgb.train(
-  params = params,
-  data = lgb_train_data,
-  nrounds = 100
+lgb_class_model <- train(
+  x = X_train_classification, 
+  y = y_train_classification, 
+  method = "gbm",  
+  trControl = train_ctrl,
+  metric = "Accuracy"
 )
 
-# Predict probabilities on test set
-pred_probs <- predict(lgb_model, as.matrix(X_test_classification))
+# Prediction using caret method
+lgb_class_prediction <- predict(lgb_class_model, X_test_classification)
 
-# Convert probabilities to predicted class index
-pred_matrix <- matrix(pred_probs, ncol = length(unique(y_train_classification)), byrow = TRUE)
-pred_labels <- max.col(pred_matrix)
-
-# Convert to factor with original levels
-predicted_class <- factor(pred_labels, labels = levels(y_train_classification))
-
-# Evaluate model performance
-confusionMatrix(predicted_class, y_test_classification)
-
+# Evaluate model performance - Confusion Matrix
+lgb_class_cm <- confusionMatrix(lgb_class_prediction, y_test_classification)
+print(lgb_class_cm)
 ```
 
 #### Logistic Regression Model
@@ -1145,7 +1328,6 @@ confusionMatrix(predicted_class, y_test_classification)
 In this project, Logistic Regression was applied to predict the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and facilities. While it is a linear model and may not capture complex interactions, it serves as a strong baseline due to its simplicity, interpretability, and efficiency.
 
 ```{r}
-
 # Train multinomial logistic regression model
 log_reg_model <- train(
   x = X_train_classification,
@@ -1163,6 +1345,7 @@ log_reg_class_cm <- confusionMatrix(log_reg_class_prediction, y_test_classificat
 print(log_reg_class_cm)
 
 ```
+
 
 #### Decision Tree Classifier
 
@@ -1187,7 +1370,6 @@ dt_class_cm <- confusionMatrix(dt_class_prediction, y_test_classification)
 print (dt_class_cm)
 
 ```
-
 
 #### Neural Network Classifier
 
