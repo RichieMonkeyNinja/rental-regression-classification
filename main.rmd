@@ -701,12 +701,13 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
     plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
   )
 ```
+
 # Feature Engineering
+
 ```{r}
 df_feature = data.frame(df_EDA) #Make a copy for Data Modelling
 head(df_feature)
 ```
-
 
 ```{r}
 
@@ -718,7 +719,6 @@ df_feature <- df_feature %>% filter(bathroom > 0 & bathroom < 4)
 
 head(df_feature)
 ```
-
 
 ```{r}
 heatmap_data <- df_feature %>%
@@ -739,8 +739,6 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
     plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
   )
 ```
-
-
 
 ```{r}
 # Make a copy (assuming df_feature exists)
@@ -869,6 +867,7 @@ cat("X_train_regression shape:", dim(X_train_regression), "y_train_regression sh
 # Print the shape of X_test_regression and y_test_regression
 cat("X_test_regression shape:", dim(X_test_regression), "y_test_regression shape:", length(y_test_regression))
 ```
+
 ### Classification Model (Predict Furnishing Status)
 
 For the classification task, the target variable is `furnished`, which includes three categories: fully furnished, partially furnished, and unfurnished. The goal is to predict the furnishing status of a rental unit based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Various classification algorithms were applied, and model performance was evaluated using metrics such as Accuracy, Precision, Recall, F1-Score, and the Confusion Matrix to assess how well each model distinguishes between furnishing categories.
@@ -1002,7 +1001,6 @@ print("Head of X_test_regression (after all transformations):")
 head(X_test_regression)
 ```
 
-
 ## Model Training
 
 In this section, the respective training sets are used to build predictive models for both regression and classification tasks. Various machine learning algorithms are applied to each task to identify the most effective approach. For the regression model, algorithms aim to predict rental prices, while for the classification model, algorithms are trained to predict the furnishing status of a property. Each model is trained using the features selected during preprocessing and is later evaluated on the corresponding test set.
@@ -1070,6 +1068,7 @@ cat("Linear Regression MAE: ", lm_mae, "\n")
 cat("Linear Regression MSE: ", lm_mse, "\n")
 
 ```
+
 ```{r}
 # Assuming lm_model has been trained as in your code snippet
 
@@ -1217,7 +1216,6 @@ cat("Decision Tree MSE: ", dt_mse, "\n")
 
 ```
 
-
 #### Neural Network Model
 
 Neural Networks are inspired by the structure of the human brain and are capable of modeling complex, non-linear relationships between inputs and outputs. In this project, a Neural Network was trained to predict monthly rental prices using property-related features. The model consists of interconnected layers of nodes (neurons) that learn feature representations through weighted connections. Neural Networks are particularly powerful for capturing hidden patterns in the data, but they require careful tuning and are less interpretable compared to tree-based models. When properly optimized, they can deliver strong predictive performance in regression tasks.
@@ -1249,7 +1247,6 @@ cat("Neural Network MAE: ", nn_mae, "\n")
 cat("Neural Network MSE: ", nn_mse, "\n")
 
 ```
-
 
 ### Classification Model (Predict Furnishing Status)
 
@@ -1346,7 +1343,6 @@ print(log_reg_class_cm)
 
 ```
 
-
 #### Decision Tree Classifier
 
 The Decision Tree Classifier is a simple yet powerful algorithm that makes predictions by learning decision rules from the data and organizing them into a tree-like structure. For this project, it was used to classify the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Decision trees are easy to interpret and visualize, making them useful for understanding how different features influence the furnishing category. However, they can be prone to overfitting, especially on noisy data or datasets with many categories.
@@ -1395,3 +1391,160 @@ nn_class_cm <- confusionMatrix(nn_class_prediction, y_test_classification)
 print(nn_class_cm)
 
 ```
+
+
+# Data Evaluation and Interpretation
+
+## 1. Regression Model Evaluation: Predicting Monthly Rental Price
+
+Several regression models were trained to predict the monthly rental price of apartments in KL/Selangor. The following models were evaluated: **Linear Regression, Decision Tree, XGBoost, LightGBM, and Neural Network**.
+
+### a) Performance Metrics
+
+| Model             | RMSE     | MAE        | MSE      | R²      |
+|-------------------|----------|------------|----------|---------|
+| Linear Regression | 1.060901 | 0.09617472 | 1.12551  | 0.00252 |
+| Decision Tree     | 1.062292 | 0.08849119 | 1.128465 | NA      |
+| XGBoost           | 1.065795 | 0.08985116 | 1.135919 | 0.00008 |
+| LightGBM          | 1.071493 | 0.102214   | 1.148098 | 0.00001 |
+| Neural Network    | 1.062122 | 0.09297507 | 1.128103 | NA      |
+
+### b) Key Visualizations
+
+#### **Actual vs Predicted Rental Price**
+
+Linear Regression
+
+```{r}
+df_pred <- data.frame(Actual = y_test_regression, Predicted = lm_prediction)
+library(ggplot2)
+p <- ggplot(df_pred, aes(x = Actual, y = Predicted)) +
+  geom_point(alpha = 0.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Actual vs Predicted Rental Price (Linear Regression)",
+       x = "Actual (Standardized)",
+       y = "Predicted (Standardized)") +
+  theme_minimal()
+
+if (!dir.exists("plots")) dir.create("plots")
+
+ggsave("plots/lm_actual_vs_predicted.png", plot = p)
+
+knitr::include_graphics("plots/lm_actual_vs_predicted.png")
+```
+
+#### **Regression Residual Plot**
+
+```{r}
+# Residuals
+df_resid <- data.frame(Predicted = lm_prediction, Residuals = y_test_regression - lm_prediction)
+p2 <- ggplot(df_resid, aes(x = Predicted, y = Residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  labs(title = "Residuals Plot (Linear Regression)",
+       x = "Predicted (Standardized)",
+       y = "Residuals") +
+  theme_minimal()
+
+if (!dir.exists("plots")) dir.create("plots")
+
+ggsave("plots/lm_residuals.png", plot = p2)
+
+knitr::include_graphics("plots/lm_residuals.png")
+
+```
+
+#### **Feature Importance (XGBoost)**
+
+For XGBoost:
+
+```{r}
+library(xgboost)
+# Use $finalModel to access the xgb.Booster object
+importance_matrix <- xgb.importance(model = xgb_model$finalModel)
+xgb.plot.importance(importance_matrix, top_n = 10)
+
+# To save as PNG
+png("plots/xgb_feature_importance.png")
+xgb.plot.importance(importance_matrix, top_n = 10)
+dev.off()
+```
+
+### c) Discussion and Interpretation
+
+The regression models yielded similar results, with RMSE values between 1.06 and 1.07 and R² values close to zero. This suggests that while predictions are stable, the features in the dataset do not explain much of the variance in rental price. Feature importance plots show that the most influential variables are typically property size, type, and age, but their combined predictive power is limited.
+
+-   Strengths: Consistent RMSE/MAE across models.
+
+-   Weaknesses: R² near zero; even complex models (XGBoost, LightGBM) do not improve prediction, indicating a lack of key explanatory variables.
+
+-   Real-world implications: Rental price is influenced by many external factors not captured in the dataset, such as neighborhood prestige or short-term market forces.
+
+## 2. Classification Model Evaluation: Predicting Furnishing Status
+
+### a) Performance Metrics
+
+| Metric              | Value   |
+|---------------------|---------|
+| Accuracy            | 0.5482  |
+| Kappa               | 0.1352  |
+| No Info Rate        | 0.5082  |
+| Class 1 Sensitivity | 0.7974  |
+| Class 2 Sensitivity | 0.0000  |
+| Class 3 Sensitivity | \~0.360 |
+
+### b) Key Visualizations
+
+#### Confusion Matrix
+
+```{r}
+library(caret)
+cm <- confusionMatrix(xgb_class_prediction, y_test_classification)
+cm_table <- as.data.frame(cm$table)
+library(ggplot2)
+p3 <- ggplot(cm_table, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  geom_text(aes(label = Freq)) +
+  scale_fill_gradient(low = "white", high = "red") +
+  labs(title = "Confusion Matrix (XGBoost)") +
+  theme_minimal()
+
+if (!dir.exists("plots")) dir.create("plots")
+
+ggsave("plots/xgb_confusion_matrix.png", plot = p3)
+
+knitr::include_graphics("plots/xgb_confusion_matrix.png")
+
+```
+
+#### ROC CUrve
+
+```{r}
+prob_mat <- predict(xgb_class_model, X_test_classification, type = "prob")
+prob_furnished <- prob_mat[, "1"] # or use the appropriate class column name
+
+library(pROC)
+# prob_furnished = predicted probability of the positive class (for XGBoost etc.)
+roc_obj <- roc(y_test_classification, prob_furnished)
+png("plots/xgb_roc_curve.png")
+plot(roc_obj, main = "ROC Curve (XGBoost)")
+dev.off()
+
+knitr::include_graphics("plots/xgb_roc_curve.png")
+```
+
+### c) Discussion and Interpretation
+
+The logistic regression model achieved moderate accuracy (54.8%), only slightly above the No Information Rate (50.8%). Class 2 was never predicted, suggesting severe class imbalance or model insensitivity to that category. The confusion matrix reveals the model predicts the majority class most often, with poor differentiation between classes. This demonstrates a need for improved data balance, feature engineering, or more advanced classifiers.
+
+-   Limitations: Poor performance for minority class; significant misclassification.
+
+-   Recommendations: Try oversampling/undersampling, more powerful models (e.g., Random Forest, XGBoost), or create new features that better separate furnishing categories.
+
+## 3. Overall Insights and Limitations
+
+-   Regression: All models provide consistent but limited predictions. R² near zero signals missing key features for rental price estimation.
+
+-   Classification: Model struggles to distinguish classes, likely due to data imbalance or insufficient features.
+
+-   Limitation: The dataset lacks features such as property quality, amenities, and micro-location specifics, limiting model performance.
