@@ -730,6 +730,10 @@ df_model <- df_model %>%
     furnished_encoded = as.integer(factor(furnished))
   )
 
+#Encode 2 to 0 for property_type
+
+df_model$property_type_encoded[df_model$property_type_encoded==2] = 0
+
 #Transform the 'completion_year' column to age of the property
 
 current_year <- 2025
@@ -761,7 +765,6 @@ df_facilities_encoded <- df_facilities %>%
 
 #Merge back to the original dataframe
 df_model_encoded <- bind_cols(df_model, df_facilities_encoded)
-
 
 #Filter out unwanted columns
 drop_columns <- c("ads_id","prop_name", "full_location", "location","property_type", "furnished", "facilities", "additional_facilities", "region",  "completion_year","distance_to_TRX", "distance_to_KLCC", "distance_to_BukitBintang", "Popular_location_distance", "size", "monthly_rent")
@@ -1016,37 +1019,6 @@ cat("Decision Tree MSE: ", dt_mse, "\n")
 
 ```
 
-#### Random Forest Model
-
-Random Forest is an ensemble learning method that builds multiple decision trees and combines their outputs to improve predictive accuracy and reduce overfitting. Each tree is trained on a random subset of the data and features, which increases model robustness and generalization. In this project, Random Forest was used to predict monthly rental prices by leveraging property features. It is well-suited for handling complex, non-linear relationships and provides good performance even with noisy or unbalanced data. Additionally, it offers feature importance insights, which help in understanding the influence of different variables on rental pricing.
-
-```{r}
-
-#Train Random Forest model
-rf_model <- train (
-  x = X_train_regression, 
-  y = y_train_regression, 
-  method = "rf", 
-  trControl = train_ctrl,
-  metric = "RMSE" #train() can only accept one metric at a time
-)
-
-#Prediction
-rf_prediction <- predict(rf_model, X_test_regression)
-
-#Evaluate model performance
-rf_rmse <- RMSE(rf_prediction, y_test_regression)
-rf_r2 <- R2(rf_prediction, y_test_regression)
-rf_mae <- MAE(rf_prediction, y_test_regression)
-rf_mse <- (rf_rmse)^2
-
-cat("Random Forest RMSE: ", rd_rmse, "\n")
-cat("Random Forest R²: ", rf_r2, "\n")
-cat("Random Forest MAE: ", rf_mae, "\n")
-cat("Random Forest MSE: ", rf_mse, "\n")
-
-```
-
 #### Neural Network Model
 
 Neural Networks are inspired by the structure of the human brain and are capable of modeling complex, non-linear relationships between inputs and outputs. In this project, a Neural Network was trained to predict monthly rental prices using property-related features. The model consists of interconnected layers of nodes (neurons) that learn feature representations through weighted connections. Neural Networks are particularly powerful for capturing hidden patterns in the data, but they require careful tuning and are less interpretable compared to tree-based models. When properly optimized, they can deliver strong predictive performance in regression tasks.
@@ -1079,37 +1051,6 @@ cat("Neural Network MSE: ", nn_mse, "\n")
 
 ```
 
-#### CatBoost Model
-
-CatBoost is a high-performance gradient boosting algorithm developed by Yandex, designed to handle categorical features effectively without the need for extensive preprocessing. In this project, CatBoost was used to predict monthly rental prices based on property features. It automatically manages categorical variables, reduces overfitting, and performs well even with relatively small datasets. CatBoost is particularly useful when dealing with mixed data types and delivers strong predictive accuracy while maintaining stability and ease of use.
-
-```{r}
-
-#Train CatBoost model
-catb_model <- train (
-  x = X_train_regression, 
-  y = y_train_regression, 
-  method = "catboost", 
-  trControl = train_ctrl,
-  metric = "RMSE" #train() can only accept one metric at a time
-)
-
-#Prediction
-catb_prediction <- predict(catb_model, X_test_regression)
-
-#Evaluate model performance
-catb_rmse <- RMSE(catb_prediction, y_test_regression)
-catb_r2 <- R2(catb_prediction, y_test_regression)
-catb_mae <- MAE(catb_prediction, y_test_regression)
-catb_mse <- (catb_rmse)^2
-
-cat("CatBoost RMSE: ", catb_rmse, "\n")
-cat("CatBoost R²: ", catb_r2, "\n")
-cat("CatBoost MAE: ", catb_mae, "\n")
-cat("CatBoost MSE: ", catb_mse, "\n")
-
-
-```
 
 ### Classification Model (Predict Furnishing Status)
 
@@ -1161,21 +1102,41 @@ For this classification task, LightGBM was used to predict the furnishing status
 
 ```{r}
 
-#Train XGBoost model
-lgb_class_model <- train (
-  x = X_train_classification, 
-  y = y_train_classification, 
-  method = "lightgbm", 
-  trControl = train_ctrl,
-  metric = "Accuracy" #train() can only accept one metric at a time
+# Ensure lightgbm is loaded
+library(lightgbm)
+
+# Convert features to matrix and labels to numeric (LightGBM needs labels starting from 0)
+lgb_train_data <- lgb.Dataset(data = as.matrix(X_train_classification), 
+                              label = as.numeric(y_train_classification) - 1)
+
+# Set LightGBM parameters
+params <- list(
+  objective = "multiclass",
+  metric = "multi_logloss",
+  num_class = length(unique(y_train_classification)),
+  learning_rate = 0.05,
+  num_leaves = 31
 )
 
-#Prediction
-lgb_class_prediction <- predict(lgb_class_model, X_test_classification)
+# Train LightGBM model
+lgb_model <- lgb.train(
+  params = params,
+  data = lgb_train_data,
+  nrounds = 100
+)
 
-#Evaluate model performance - Confusion Matrix
-lgb_class_cm <- confusionMatrix(lgb_class_prediction, y_test_classification)
-print (lgb_class_cm)
+# Predict probabilities on test set
+pred_probs <- predict(lgb_model, as.matrix(X_test_classification))
+
+# Convert probabilities to predicted class index
+pred_matrix <- matrix(pred_probs, ncol = length(unique(y_train_classification)), byrow = TRUE)
+pred_labels <- max.col(pred_matrix)
+
+# Convert to factor with original levels
+predicted_class <- factor(pred_labels, labels = levels(y_train_classification))
+
+# Evaluate model performance
+confusionMatrix(predicted_class, y_test_classification)
 
 ```
 
@@ -1185,46 +1146,21 @@ In this project, Logistic Regression was applied to predict the furnishing statu
 
 ```{r}
 
-#Train XGBoost model
-log_reg_model <- train (
-  x = X_train_classification, 
-  y = y_train_classification, 
-  method = "glm", 
-  family = "binomial", #To tell the model that the target variable is binary
+# Train multinomial logistic regression model
+log_reg_model <- train(
+  x = X_train_classification,
+  y = y_train_classification,
+  method = "multinom",
   trControl = train_ctrl,
-  metric = "Accuracy" #train() can only accept one metric at a time
+  metric = "Accuracy"
 )
 
-#Prediction
+# Predict
 log_reg_class_prediction <- predict(log_reg_model, X_test_classification)
 
-#Evaluate model performance - Confusion Matrix
+# Evaluate
 log_reg_class_cm <- confusionMatrix(log_reg_class_prediction, y_test_classification)
-print (log_reg_class_cm)
-
-```
-
-#### CatBoost Model
-
-In this classification task, CatBoost was used to predict the furnishing status of rental properties using features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. Its ability to automatically process categorical variables and prevent overfitting makes it highly suitable for multi-class classification problems, offering both strong predictive performance and ease of implementation.
-
-```{r}
-
-#Train CatBoost model
-catb_class_model <- train (
-  x = X_train_classification, 
-  y = y_train_classification, 
-  method = "catboost", 
-  trControl = train_ctrl,
-  metric = "Accuracy" #train() can only accept one metric at a time
-)
-
-#Prediction
-catb_class_prediction <- predict(catb_class_model, X_test_classification)
-
-#Evaluate model performance - Confusion Matrix
-catb_class_cm <- confusionMatrix(catb_class_prediction, y_test_classification)
-print (catb_class_cm)
+print(log_reg_class_cm)
 
 ```
 
@@ -1252,53 +1188,6 @@ print (dt_class_cm)
 
 ```
 
-#### Random Forest Classifier
-
-The Random Forest Classifier is an ensemble learning method that builds multiple decision trees and combines their outputs to improve prediction accuracy and generalization. In this project, it was used to predict the furnishing status of rental properties based on key features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. By averaging the results of many diverse trees, the model reduces overfitting and handles both linear and non-linear relationships effectively. It also provides insights into feature importance, helping to understand which variables most influence the furnishing status.
-
-```{r}
-
-#Train Random Forest Classifier
-rf_class_model <- train (
-  x = X_train_classification, 
-  y = y_train_classification, 
-  method = "rf", 
-  trControl = train_ctrl,
-  metric = "Accuracy" #train() can only accept one metric at a time
-)
-
-#Prediction
-rf_class_prediction <- predict(rf_class_model, X_test_classification)
-
-#Evaluate model performance - Confusion Matrix
-rf_class_cm <- confusionMatrix(rf_class_prediction, y_test_classification)
-print (rf_class_cm)
-
-```
-
-#### Support Vector Machines (SVM) Classifier
-
-Support Vector Machines (SVM) is a powerful classification algorithm that works by finding the optimal hyperplane that best separates classes in the feature space. In this project, SVM was used to classify the furnishing status of rental properties based on features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. SVM is particularly effective in handling high-dimensional data and can model non-linear decision boundaries using kernel functions. Although it may require careful tuning and is less interpretable than tree-based models, SVM often delivers strong performance in structured classification tasks.
-
-```{r}
-
-#Train Support Vector Machines (SVM) Classifier
-svm_class_model <- train (
-  x = X_train_classification, 
-  y = y_train_classification, 
-  method = "svmRadial", 
-  trControl = train_ctrl,
-  metric = "Accuracy" #train() can only accept one metric at a time
-)
-
-#Prediction
-svm_class_prediction <- predict(svm_class_model, X_test_classification)
-
-#Evaluate model performance - Confusion Matrix
-svm_class_cm <- confusionMatrix(svm_class_prediction, y_test_classification)
-print (svm_class_cm)
-
-```
 
 #### Neural Network Classifier
 
