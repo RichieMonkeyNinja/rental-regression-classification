@@ -294,7 +294,7 @@ After applying all cleaning steps, the dataset is free from duplicates and missi
 colSums(is.na(df))
 ```
 
-## Feature Engineering
+## Pre-Feature Engineering
 
 The `ggmap` package is used to retrieve geographic coordinates (latitude and longitude) for each property and calculate the distance to well-known landmarks in Kuala Lumpur, such as KLCC, Bukit Bintang, and TRX. This helps capture location-based value, which is an important factor in determining rental price.
 
@@ -440,6 +440,8 @@ df <- df_import_PopularLocation
 head(df)
 ```
 
+To get whether the property is near to public transport such as KTM or LRT, if the words appear in the additional facilities it will create as 1 (Yes) stored inside the `near_public_transport` column else will be stored as 0 (No).
+
 ```{r}
 df <- df %>%
   mutate(near_public_transport = as.integer(grepl("Near KTM/LRT", additional_facilities, ignore.case = TRUE)))
@@ -532,6 +534,8 @@ bar_chart_columns <- c("parking", "rooms", "bathroom", "completion_year")
 plot_bar_chart_char(bar_chart_columns)
 
 ```
+
+## Bivariate Analysis
 
 ### Pie Chart of Property Type
 
@@ -709,6 +713,8 @@ df_feature = data.frame(df_EDA) #Make a copy for Data Modelling
 head(df_feature)
 ```
 
+In this section, the team will filter outliers from the dataset. Based on the early indications from the histogram and boxplot, most monthly rents are below \$5,000, housing size is below \$3,000, and the room, package, and bathroom sizes are below 6, 4, and 4, respectively. Therefore, the team will filter the data to try to keep a large sample size within the dataset.
+
 ```{r}
 
 df_feature <- df_feature %>% filter(monthly_rent > 400 & monthly_rent < 5000)
@@ -720,8 +726,75 @@ df_feature <- df_feature %>% filter(bathroom > 0 & bathroom < 4)
 head(df_feature)
 ```
 
+In this section, the team will perform coverting process on the dataset to prepare it for data modelling. Firstly, the team will recode the furnished column transforming the string value into numeric values "Fully Furnished" is assigned 1, "Partially Furnished" is 2, and "Not Furnished" is 3. Similar r ecode for the property type "Condominium" becomes 1 and "Service Residence" becomes 0.
+
+Next, the team will create a new column for calculate the year built from the current year, and forming "property_age" column. Then will combines the facilities and additional facilities columns into a single column, after that removing corruption data such as containing numebric, only keep as valid character of form. In addition, calculate the number of facilities and stored inside a new column "number_facilities".
+
 ```{r}
-heatmap_data <- df_feature %>%
+# Make a copy (assuming df_feature exists)
+df_feature_prepare = data.frame(df_feature)
+
+# ---------------------------------------------------------------------------------
+# Recode 'furnished' column
+df_feature_prepare$furnished <- df_feature_prepare$furnished %>%
+  recode(
+    "Fully Furnished" = 1,
+    "Partially Furnished" = 2,
+    "Not Furnished" = 3
+  ) %>%
+  as.numeric()
+
+
+# ---------------------------------------------------------------------------------
+# Recode 'property_type'
+df_feature_prepare$property_type <- df_feature_prepare$property_type %>%
+  recode(
+    "Condominium" = 1,
+    "Service Residence" = 0
+  ) %>%
+  as.numeric()
+
+# ---------------------------------------------------------------------------------
+# Transform the 'completion_year' column to age of the property
+current_year <- 2025
+df_feature_prepare$property_age <- current_year - df_feature_prepare$completion_year
+
+# ---------------------------------------------------------------------------------
+# Combine both 'facilities' and 'additional facilities' columns
+
+# Ensure both columns are character type before pasting to avoid issues with factors
+df_feature_prepare$facilities <- as.character(df_feature_prepare$facilities)
+df_feature_prepare$additional_facilities <- as.character(df_feature_prepare$additional_facilities)
+
+# Column combining
+df_combined_facilities <- df_feature_prepare %>%
+  mutate(facilities_combined = paste(facilities, additional_facilities, sep = ", "))
+# ---------------------------------------------------------------------------------
+
+# Remove unwanted characters such as 10, 11, 6 in 'facilities' column
+df_combined_facilities$facilities_combined <- gsub("[^a-zA-Z, ]", "", df_combined_facilities$facilities_combined)
+
+# Count the number of facilities from 'facilities_combined'
+df_facilities <- df_combined_facilities %>%
+  mutate(number_facilities = sapply(strsplit(facilities_combined, ", "), length))
+
+# ---------------------------------------------------------------------------------
+#Data Attribute selection
+keep_columns <- c("rooms", "parking", "bathroom", "near_public_transport",
+                  "monthly_rent", "size", "Popular_location_distance", 
+                  "property_type", "furnished", "property_age", "number_facilities"
+                  , "location")
+
+# Filter the wanted columns for data modelling
+df_final_prepared <- df_facilities %>% select(any_of(keep_columns))
+
+df_final_prepared$location <- factor(df_final_prepared$location)
+
+head(df_final_prepared)
+```
+
+```{r}
+heatmap_data <- df_final_prepared %>%
   select(where(is.numeric)) #Select only numeric data (remove such as prop_name, e.g.)
 
 corr_data <- cor(heatmap_data, use = "complete.obs") #Transfer into numeric (-1 , 1)
@@ -738,88 +811,6 @@ ggplot(melted_corr, aes(x = Var1, y = Var2, fill = value)) +
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(hjust = 0.2, size = 16, face = "bold")
   )
-```
-
-```{r}
-# Make a copy (assuming df_feature exists)
-df_feature_prepare = data.frame(df_feature)
-
-# 2. Clean the 'furnished' column: trim whitespace and standardize case (optional, but good practice)
-df_feature_prepare$furnished <- trimws(df_feature_prepare$furnished) # Remove leading/trailing spaces
-# df_feature_prepare$furnished <- tolower(df_feature_prepare$furnished) # Convert to lowercase if needed
-
-# Recode 'furnished' column
-df_feature_prepare$furnished <- df_feature_prepare$furnished %>%
-  recode(
-    "Fully Furnished" = 1,
-    "Partially Furnished" = 2,
-    "Not Furnished" = 3,
-    .default = NA_real_ # Explicitly handle anything unmatched
-  ) %>%
-  as.numeric()
-
-# Check unique values after recoding
-print("Unique values in 'furnished' after recoding:")
-print(unique(df_feature_prepare$furnished))
-
-
-# --- Diagnosing and Cleaning 'property_type' column ---
-# 1. Check unique values before recoding
-print("Unique values in 'property_type' before recoding:")
-print(unique(df_feature_prepare$property_type))
-
-# 2. Clean the 'property_type' column: trim whitespace and standardize case (if applicable)
-df_feature_prepare$property_type <- trimws(df_feature_prepare$property_type) # Remove leading/trailing spaces
-# df_feature_prepare$property_type <- tolower(df_feature_prepare$property_type) # Convert to lowercase if needed
-
-# Recode 'property_type'
-df_feature_prepare$property_type <- df_feature_prepare$property_type %>%
-  recode(
-    "Condominium" = 1,
-    "Service Residence" = 0,
-    .default = NA_real_ # Essential to catch unmatched values
-  ) %>%
-  as.numeric()
-
-# Check unique values after recoding
-print("Unique values in 'property_type' after recoding:")
-print(unique(df_feature_prepare$property_type))
-
-
-# Transform the 'completion_year' column to age of the property
-current_year <- 2025
-df_feature_prepare$property_age <- current_year - df_feature_prepare$completion_year
-
-
-# Combine both 'facilities' and 'additional facilities' columns
-# Ensure both columns are character type before pasting to avoid issues with factors
-df_feature_prepare$facilities <- as.character(df_feature_prepare$facilities)
-df_feature_prepare$additional_facilities <- as.character(df_feature_prepare$additional_facilities)
-
-df_combined_facilities <- df_feature_prepare %>%
-  mutate(facilities_combined = paste(facilities, additional_facilities, sep = ", "))
-
-# Remove unwanted characters such as 10, 11, 6 in 'facilities' column
-# Make sure to work on the df_combined_facilities object
-df_combined_facilities$facilities_combined <- gsub("[^a-zA-Z, ]", "", df_combined_facilities$facilities_combined)
-
-# Count the number of facilities from 'facilities_combined'
-df_facilities <- df_combined_facilities %>%
-  mutate(number_facilities = sapply(strsplit(facilities_combined, ", "), length))
-
-
-# --- Final Filtering and Selection ---
-keep_columns <- c("rooms", "parking", "bathroom", "near_public_transport",
-                  "monthly_rent", "size",
-                  "Popular_location_distance", "property_type",
-                  "furnished", "property_age", "number_facilities", "location")
-
-# Filter out unwanted columns from the last dataframe where you performed transformations
-df_final_prepared <- df_facilities %>% select(any_of(keep_columns))
-
-df_final_prepared$location <- factor(df_final_prepared$location)
-
-head(df_final_prepared)
 ```
 
 # Data Modelling
@@ -904,62 +895,47 @@ cat("X_test_classification shape:", dim(X_test_classification), "y_test_classifi
 To prepare the data for modeling, numerical features such as rental price and property size were standardized to ensure consistent scale, improving model performance. Categorical variables like property type and furnishing status were encoded into numeric formats using label encoding, enabling them to be used effectively in machine learning algorithms. These preprocessing steps help ensure the dataset is clean, structured, and model-ready.
 
 ```{r}
-library(caret) # For createDataPartition
-library(dplyr) # For %>% and select
-
-# Assuming df_model is your complete dataset (df_feature_prepare after initial feature engineering)
-# And 'split' variable is defined (e.g., split = 0.8)
-
-# --- 1. Initial Data Splitting ---
-train_index_regression <- createDataPartition(df_model$monthly_rent, p = split, list = FALSE)
-
-# Create copies for modification, select out target variable
-X_train_regression <- df_model[train_index_regression, ] %>% select(-monthly_rent)
-X_test_regression <- df_model[-train_index_regression, ] %>% select(-monthly_rent)
-
-y_train_regression <- df_model$monthly_rent[train_index_regression]
-y_test_regression <- df_model$monthly_rent[-train_index_regression]
-
-# --- 2. Standardize 'monthly_rent' (Target Variable y) ---
+#Standardize monthly_rent
 mean_y_train <- mean(y_train_regression)
 sd_y_train <- sd(y_train_regression)
 
 y_train_regression_scaled <- (y_train_regression - mean_y_train) / sd_y_train
 y_test_regression_scaled <- (y_test_regression - mean_y_train) / sd_y_train
 
-# --- 3. Standardize Numeric Features in X ('size', 'Popular_location_distance') ---
-
+#----------------------------------------------------------------------------------
 # Calculate mean and standard deviation from training X
+#Size
 mean_size_train <- mean(X_train_regression$size)
 sd_size_train <- sd(X_train_regression$size)
 
+#popular_location_distance
 mean_popular_location_distance_train <- mean(X_train_regression$Popular_location_distance)
 sd_popular_location_distance_train <- sd(X_train_regression$Popular_location_distance)
 
+#----------------------------------------------------------------------------------
 # Apply standardization to both training and test X
+#Size
 X_train_regression$size_scaled <- (X_train_regression$size - mean_size_train) / sd_size_train
 X_test_regression$size_scaled <- (X_test_regression$size - mean_size_train) / sd_size_train
 
+#popular_location_distance regression
 X_train_regression$popular_location_distance_scaled <- (X_train_regression$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
 X_test_regression$popular_location_distance_scaled <- (X_test_regression$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
 
+#popular_location_distance classification
 X_train_classification$popular_location_distance_scaled <- (X_train_classification$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
 X_test_classification$popular_location_distance_scaled <- (X_test_classification$Popular_location_distance - mean_popular_location_distance_train) / sd_popular_location_distance_train
 
-
-# --- 4. Encode 'location' (Label Encoding) ---
-# Ensure 'location' is a factor in your original df_model for consistent level ordering
-# Or convert it here for train/test sets explicitly
+#----------------------------------------------------------------------------------
+# Label Encoding for location
 X_train_regression$location <- as.factor(X_train_regression$location)
 X_test_regression$location <- as.factor(X_test_regression$location)
 
 X_train_classification$location <- as.factor(X_train_classification$location)
 X_test_classification$location <- as.factor(X_test_classification$location)
 
-
-
-# Get all unique levels from the *training* data to ensure consistent encoding
-# This is crucial! Only train set levels define the mapping.
+#----------------------------------------------------------------------------------
+# Get all unique levels from the training set
 all_location_levels <- levels(X_train_regression$location)
 
 # Convert to factor with consistent levels, then to numeric
@@ -967,38 +943,27 @@ X_train_regression$location_encoded <- as.numeric(factor(X_train_regression$loca
 X_test_regression$location_encoded <- as.numeric(factor(X_test_regression$location, levels = all_location_levels))
 
 X_train_classification$location_encoded <- as.numeric(factor(X_train_classification$location, levels = all_location_levels))
+
 X_test_classification$location_encoded <- as.numeric(factor(X_test_classification$location, levels = all_location_levels))
 
-# Handle potential NAs in test set if new locations appear
-# Decide on a default value:
-# - NA_integer_ (if your model can handle NAs, e.g., some tree-based models)
-# - 0 (if 0 is not used by any existing category and makes sense as a "default/unseen" category)
-# - The mean/median of other encoded locations (less common for label encoding)
-# Let's use 0 as a common placeholder for unseen categories in label encoding.
-default_location_value <- 0
-X_test_regression$location_encoded[is.na(X_test_regression$location_encoded)] <- default_location_value
-X_test_classification$location_encoded[is.na(X_test_classification$location_encoded)] <- default_location_value
-
-
-# --- 5. Remove Original (Unscaled/Unencoded) Columns ---
+#----------------------------------------------------------------------------------
+# Remove unwanted columns ---
 X_train_regression <- X_train_regression %>%
-  select(-size, -Popular_location_distance, -location) # Use comma for multiple columns to remove
+  select(-size, -Popular_location_distance, -location)
 
 X_test_regression <- X_test_regression %>%
   select(-size, -Popular_location_distance, -location)
 
 X_train_classification <- X_train_classification %>%
-  select(-size, -Popular_location_distance, -location) # Use comma for multiple columns to remove
+  select(-size, -Popular_location_distance, -location) 
 
 X_test_classification <- X_test_classification %>%
   select(-size, -Popular_location_distance, -location)
 
-
-# --- 7. Inspect a few rows ---
-print("Head of X_train_regression (after all transformations):")
-head(X_train_regression)
-print("Head of X_test_regression (after all transformations):")
-head(X_test_regression)
+#----------------------------------------------------------------------------------
+#Display the output
+print(X_train_regression)
+print(X_train_classification)
 ```
 
 ## Model Training
@@ -1069,47 +1034,6 @@ cat("Linear Regression MSE: ", lm_mse, "\n")
 
 ```
 
-```{r}
-# Assuming lm_model has been trained as in your code snippet
-
-# 1. Access the model's coefficients
-# For an "lm" method in train, the actual linear model object is stored within lm_model$finalModel
-coefficients <- coef(lm_model$finalModel)
-
-# Convert to a data frame for easier manipulation
-coefficients_df <- as.data.frame(coefficients)
-colnames(coefficients_df) <- "Coefficient"
-
-# Remove the intercept term, as it's not a feature importance
-coefficients_df <- coefficients_df[-1, , drop = FALSE] # remove the (Intercept) row
-
-# Calculate absolute coefficients for importance ranking
-coefficients_df$Abs_Coefficient <- abs(coefficients_df$Coefficient)
-
-# Order by absolute coefficient value (descending)
-feature_importance <- coefficients_df[order(coefficients_df$Abs_Coefficient, decreasing = TRUE), ]
-
-# Print the top N most important features
-print("Feature Importance (Linear Regression - based on absolute coefficients):")
-print(head(feature_importance, 10)) # Adjust 10 to see more or fewer top features
-
-# Optional: Visualize feature importance (using ggplot2)
-library(ggplot2)
-
-# Prepare data for plotting (top N features)
-top_n <- 15 # Adjust as needed
-plot_data <- head(feature_importance, top_n)
-plot_data$Feature <- rownames(plot_data)
-
-ggplot(plot_data, aes(x = reorder(Feature, Abs_Coefficient), y = Abs_Coefficient)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
-  coord_flip() + # Makes the labels readable
-  labs(title = paste0("Top ", top_n, " Feature Importance (Linear Regression)"),
-       x = "Feature",
-       y = "Absolute Coefficient Value") +
-  theme_minimal()
-```
-
 #### XGBoost Model
 
 XGBoost (Extreme Gradient Boosting) is a powerful ensemble learning algorithm based on gradient boosting techniques. It builds a series of decision trees where each tree corrects the errors of the previous one. XGBoost is known for its high performance, speed, and ability to handle complex relationships in data. In this project, XGBoost was used to predict monthly rental prices based on various property features. It often outperforms simpler models by capturing non-linear patterns and interactions between variables, making it suitable for structured tabular data.
@@ -1146,10 +1070,7 @@ cat("XGBoost MSE: ", xgb_mse, "\n")
 LightGBM (Light Gradient Boosting Machine) is a gradient boosting framework developed for efficiency and scalability. It uses a leaf-wise tree growth strategy, which enables faster training and improved accuracy compared to traditional level-wise approaches. In this project, LightGBM was applied to predict monthly rental prices using property-related features. It is particularly effective for handling large datasets with many features and can capture complex, non-linear relationships, making it a strong performer in regression tasks.
 
 ```{r}
-library(lightgbm)
-
-# (LightGBM is not supported in caret)
-#Convert to matrix format (as LightGBM supports)
+#Convert to matrix format
 lgb_train_data <- lgb.Dataset(data = as.matrix(X_train_regression), label = y_train_regression)
 
 #Training contrl for LightGBM model
@@ -1297,12 +1218,6 @@ print (xgb_class_cm)
 For this classification task, LightGBM was used to predict the furnishing status of rental properties using inputs such as rental price, property size, property type, property age, proximity to public transport, and available facilities. The model’s leaf-wise tree growth strategy allows it to capture complex patterns in the data while maintaining high performance. Its support for multi-class classification and ability to handle categorical variables effectively make it well-suited for this prediction task.
 
 ```{r}
-# Install and load required packages if not already done
-# install.packages("lightgbm")
-# install.packages("caret")
-library(lightgbm)
-library(caret)
-
 # Train LightGBM model
 lgb_class_model <- train(
   x = X_train_classification, 
@@ -1392,7 +1307,6 @@ print(nn_class_cm)
 
 ```
 
-
 # Data Evaluation and Interpretation
 
 ## 1. Regression Model Evaluation: Predicting Monthly Rental Price
@@ -1401,13 +1315,12 @@ Several regression models were trained to predict the monthly rental price of ap
 
 ### a) Performance Metrics
 
-| Model             | RMSE     | MAE        | MSE      | R²      |
-|-------------------|----------|------------|----------|---------|
-| Linear Regression | 1.060901 | 0.09617472 | 1.12551  | 0.00252 |
-| Decision Tree     | 1.062292 | 0.08849119 | 1.128465 | NA      |
-| XGBoost           | 1.065795 | 0.08985116 | 1.135919 | 0.00008 |
-| LightGBM          | 1.071493 | 0.102214   | 1.148098 | 0.00001 |
-| Neural Network    | 1.062122 | 0.09297507 | 1.128103 | NA      |
+| Model             | RMSE     | R²        | MAE      | MSE      |
+|-------------------|----------|-----------|----------|----------|
+| Linear Regression | 491.4128 | 0.4661038 | 363.4862 | 241486.5 |
+| XGBoost           | 332.1724 | 0.7560023 | 227.5920 | 110338.5 |
+| LightGBM          | 347.3618 | 0.7354932 | 238.3184 | 120660.2 |
+| Decision Tree     | 578.9018 | 0.2585847 | 421.0874 | 335127.3 |
 
 ### b) Key Visualizations
 
@@ -1484,14 +1397,13 @@ The regression models yielded similar results, with RMSE values between 1.06 and
 
 ### a) Performance Metrics
 
-| Metric              | Value   |
-|---------------------|---------|
-| Accuracy            | 0.5482  |
-| Kappa               | 0.1352  |
-| No Info Rate        | 0.5082  |
-| Class 1 Sensitivity | 0.7974  |
-| Class 2 Sensitivity | 0.0000  |
-| Class 3 Sensitivity | \~0.360 |
+| Model | Accuracy | Precision (Macro) | Recall (Macro) | F1-Score (Macro) | AUC (Macro) |
+|------------|------------|------------|------------|------------|------------|
+| **XGBoost** | 0.747 | 0.72 | 0.63 | 0.65 | 0.88\* |
+| **LightGBM** | 0.725 | 0.70 | 0.59 | 0.60 | 0.85\* |
+| **Neural Network** | 0.678 | 0.64 | 0.52 | 0.53 | 0.81\* |
+| **Decision Tree** | 0.655 | 0.64 | 0.48 | 0.48 | 0.79\* |
+| **Logistic Reg.** | 0.685 | 0.65 | 0.50 | 0.49 | 0.80\* |
 
 ### b) Key Visualizations
 
@@ -1548,3 +1460,13 @@ The logistic regression model achieved moderate accuracy (54.8%), only slightly 
 -   Classification: Model struggles to distinguish classes, likely due to data imbalance or insufficient features.
 
 -   Limitation: The dataset lacks features such as property quality, amenities, and micro-location specifics, limiting model performance.
+
+# Conclusion
+
+In conclusion, this project successfully built two predictive models: a regression model to estimate apartment rental prices and a classification model to predict furnishing status. Through extensive data cleaning, feature engineering, and model evaluation, the analysis revealed that factors such as property size, number of rooms, furnishing condition, and proximity to major landmarks significantly influence rental outcomes. The findings provide useful insights for tenants seeking affordable yet strategic locations, and for property owners aiming to optimize their listings. Ultimately, the models support more informed and data-driven decision-making in the urban rental market of Kuala Lumpur and Selangor.
+
+# References
+
+EdgeProp. (2024, January 23). Rental demand increases as property ownership becomes less accessible. <https://www.edgeprop.my/content/1927234/rental-demand-increases-property-ownership-becomes-less-accessible>
+
+PropertyGuru. (2024). Malaysia property market report Q1 2024. <https://www.propertyguru.com.my/property-guides/malaysia-property-market-report-q1-2024-67793>
