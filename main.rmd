@@ -1386,13 +1386,13 @@ dev.off()
 
 ### c) Discussion and Interpretation
 
-The regression models yielded similar results, with RMSE values between 1.06 and 1.07 and R² values close to zero. This suggests that while predictions are stable, the features in the dataset do not explain much of the variance in rental price. Feature importance plots show that the most influential variables are typically property size, type, and age, but their combined predictive power is limited.
+The regression models yielded similar results with Neural Network as exception, with RMSE values between 330 to 600 and R² values close to 0.75. Feature importance plots show that the most influential variables are typically distance to popular locations, the location of the unit, size and furnish status, where these four features alone contribute more than 50% of the importance.
 
--   Strengths: Consistent RMSE/MAE across models.
+-   Strengths: Consistent RMSE/MAE across models except Neural Network that usually requires a more finer tuning of hyperparameters.
 
--   Weaknesses: R² near zero; even complex models (XGBoost, LightGBM) do not improve prediction, indicating a lack of key explanatory variables.
+-   Weaknesses: Computation Time, Both XGBoost and Neural Network are complex model that takes longer time to train, highlighting the incredible computational algorithm of LightGBM to have high predictive power with less time.
 
--   Real-world implications: Rental price is influenced by many external factors not captured in the dataset, such as neighborhood prestige or short-term market forces.
+-   Real-world implications: Rental price is influenced by many external factors not captured in the dataset, such as neighborhood prestige or short-term market forces. Furthermore, the rental pricing dataset was sourced in 2023, inflation and power of supply-demand may have shifted the pricing data by a slight margin throughout the years. Hence, it is important to monitor the real-world performance of the model and retrain whenever necessary.
 
 ## 2. Classification Model Evaluation: Predicting Furnishing Status
 
