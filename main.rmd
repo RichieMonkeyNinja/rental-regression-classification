@@ -988,7 +988,7 @@ classification_metrics <- c("Accuracy", "Precision", "Recall", "F1-score", "AUC-
 
 ### Regression Model (Predict Rental Price)
 
-For the regression task, several machine learning algorithms were trained to predict monthly rental prices using key property features. These features include standardized property size, furnishing status, proximity to public transport, property type, property age, and available facilities. The models applied include Linear Regression, Decision Tree, Random Forest, XGBoost, LightGBM, Neural Networks, and CatBoost.
+For the regression task, several machine learning algorithms were trained to predict monthly rental prices using key property features. These features include standardized property size, furnishing status, proximity to public transport, property type, property age, and available facilities. The models applied include Linear Regression, Decision Tree, XGBoost, LightGBM, Neural Networks.
 
 Each model was evaluated using standard regression metrics:
 
@@ -1171,7 +1171,7 @@ cat("Neural Network MSE: ", nn_mse, "\n")
 
 ### Classification Model (Predict Furnishing Status)
 
-For the classification task, several machine learning algorithms were trained to predict the furnishing status of a property, which includes three categories: fully furnished, partially furnished, and unfurnished. The models applied include Logistic Regression, Decision Tree, Random Forest Classifier, Support Vector Machine (SVM), Neural Network, XGBoost, LightGBM, and CatBoost.
+For the classification task, several machine learning algorithms were trained to predict the furnishing status of a property, which includes three categories: fully furnished, partially furnished, and unfurnished. The models applied include Logistic Regression, Decision Tree, Neural Network, XGBoost, LightGBM.
 
 These models were trained using key property features such as rental price, property size, property type, property age, proximity to public transport, and available facilities. These features were selected based on their potential influence on furnishing conditions and availability.
 
@@ -1321,6 +1321,7 @@ Several regression models were trained to predict the monthly rental price of ap
 | XGBoost           | 332.1724 | 0.7560023 | 227.5920 | 110338.5 |
 | LightGBM          | 347.3618 | 0.7354932 | 238.3184 | 120660.2 |
 | Decision Tree     | 578.9018 | 0.2585847 | 421.0874 | 335127.3 |
+| Neural Network    | 1866.903 | 0         | 1741.764 | 3485325  |
 
 ### b) Key Visualizations
 
