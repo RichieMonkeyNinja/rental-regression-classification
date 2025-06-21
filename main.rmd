@@ -30,7 +30,7 @@ Angeline Tan Jie Lin (24084444)
 
 ------------------------------------------------------------------------
 
-# **1. Introduction**
+# Introduction
 
 As Kuala Lumpur and Selangor continue to develop, they attract many young professionals and individuals from other states seeking better career opportunities. With the rising cost of living—particularly in Kuala Lumpur—renting has become a more practical choice, especially for newcomers to the urban workforce.
 
@@ -38,11 +38,11 @@ Proximity to public transport such as LRT, MRT, and KTM is a key factor in renta
 
 This project analyzes apartment rental listings from *mudah.my* in Kuala Lumpur and Selangor to uncover key pricing patterns. A regression model will be used to predict rental prices, while a classification model will explore furnishing status based on property features. The findings aim to support better decision-making for both tenants and property owners.
 
-## Title:
+## Title
 
 -   Prediction of Rental Price via Regression and Classification of Property Furnishing Level in Klang Valley, Malaysia.
 
-## Questions:
+## Questions
 
 -   The purpose of processing this dataset is to identify and understand the factors that influence apartment rental prices in Kuala Lumpur and Selangor. By analyzing various features of rental listings, such as property size, location, number of rooms, furnishing status, and proximity to transportation, the project aims to uncover patterns within the rental market and derive predictive insights.
 
@@ -60,7 +60,7 @@ This project analyzes apartment rental listings from *mudah.my* in Kuala Lumpur 
     -   This question is addressed using classification techniques. The objective is to develop a model that classifies rental listings into one of the three furnishing categories based on features such as rental price, location, property size, and number of bedrooms and bathrooms. This classification provides insights into the relationship between apartment features and furnishing status, and may support both tenant preferences and market supply analysis.
     ```
 
-## Project Goal:
+## Project Goal
 
 -   This project aims to analyze apartment rental listings from Kuala Lumpur and Selangor using data sourced from *mudah.my*. The main objectives are:
 
@@ -128,7 +128,7 @@ metadata
 
 From the metadata extracted from Kaggle above: - ads_id should be dropped as it is a unique identifier for the Mudah rental listing. - prop_name can influence the rental price, for example properties under well-known developers such as Arte tend to be higher-priced; however, it does not generalize well and unseen property names might cause issues in the model. Henceforth, we decide to drop this variable as well. - completion_year includes some NA values, will investigate further, completion_year contributes to the price and the info are usually available online, hence we will impute it manually from data found online. - monthly_rent is saved as chr type due to the "RM" prefixes, will perform appropriate data transformation. - size is saved as chr type due to the "sq. ft." suffixes, will perform appropriate data transformation.
 
-## Data Pre-processing
+# Data Pre-processing
 
 The dataset was filtered to include only listings labeled as "Serviced Residences" or "Condominium" to reduce noise and focus the analysis on high-rise residential properties. Duplicate entries based on `ads_id` were removed by retaining only the row with the least number of missing values, ensuring cleaner and more reliable input for modeling.
 
@@ -294,7 +294,7 @@ After applying all cleaning steps, the dataset is free from duplicates and missi
 colSums(is.na(df))
 ```
 
-## Pre-Feature Engineering
+## Creating feature: location from popular locations such as KLCC, Bukit Bintang, and TRX
 
 The `ggmap` package is used to retrieve geographic coordinates (latitude and longitude) for each property and calculate the distance to well-known landmarks in Kuala Lumpur, such as KLCC, Bukit Bintang, and TRX. This helps capture location-based value, which is an important factor in determining rental price.
 
