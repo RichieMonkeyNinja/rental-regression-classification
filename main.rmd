@@ -1469,4 +1469,8 @@ In conclusion, this project successfully built two predictive models: a regressi
 
 EdgeProp. (2024, January 23). Rental demand increases as property ownership becomes less accessible. <https://www.edgeprop.my/content/1927234/rental-demand-increases-property-ownership-becomes-less-accessible>
 
+<<<<<<< HEAD
 PropertyGuru. (2024). Malaysia property market report Q1 2024. <https://www.propertyguru.com.my/property-guides/malaysia-property-market-report-q1-2024-67793>
+=======
+PropertyGuru. (2024). Malaysia property market report Q1 2024. <https://www.propertyguru.com.my/property-guides/malaysia-property-market-report-q1-2024-67793>
+>>>>>>> cbe4d60a346f6f2fbf88c32a5f9093aa5a7c88ba
